@@ -48,3 +48,22 @@ Environment options:
 ## Deployment
 
 You can deploy the `dist` folder to any static host provider (netlify, surge, now, etc.)
+
+## Voice input (optional)
+
+The prompt has a microphone button that records in the browser, sends the audio
+to a speech-to-text endpoint and inserts the recognized text at the cursor. It is
+off by default and appears only when the build is given an endpoint:
+
+```bash
+OPENCODE_VOICE_STT_URL=/stt bun run build
+```
+
+The endpoint receives a `POST` with a raw `audio/wav` body (16 kHz, mono, 16-bit,
+assembled in the browser rather than by `MediaRecorder`, whose container differs
+per browser) and answers with JSON: `{ "text": "...", "model": "...",
+"latency_ms": 0, "no_speech_prob": 0.0 }`. A failing endpoint must say why in
+`detail` — the button shows that reason instead of silently inserting nothing.
+
+Recording stops on the second click or after 60 seconds. Nothing is stored: the
+audio lives only in the request, and the text goes straight into the prompt.

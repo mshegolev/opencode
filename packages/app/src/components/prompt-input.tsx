@@ -67,6 +67,8 @@ import {
   promptLength,
 } from "./prompt-input/history"
 import { createPromptSubmit, type FollowupDraft } from "./prompt-input/submit"
+import { NO_SPEECH_SUSPECT, startRecording, sttEndpoint, transcribe, VoiceError } from "./prompt-input/voice"
+import { showToast } from "@/utils/toast"
 import { PromptPopover, type AtOption, type SlashCommand } from "./prompt-input/slash-popover"
 import { PromptContextItems } from "./prompt-input/context-items"
 import { PromptImageAttachments } from "./prompt-input/image-attachments"
@@ -1087,6 +1089,102 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     readClipboardImage: platform.readClipboardImage,
   })
 
+  // Voice input: record, transcribe, insert the text at the cursor. The button
+  // exists only when the build was given an endpoint (see prompt-input/voice.ts),
+  // so a stock build renders exactly what it rendered before.
+  const voiceEndpoint = sttEndpoint()
+  const [voiceState, setVoiceState] = createSignal<"idle" | "recording" | "transcribing">("idle")
+  let recording: Awaited<ReturnType<typeof startRecording>> | undefined
+
+  const voiceFailed = (reason: string) => {
+    showToast({
+      title: language.t("prompt.toast.voiceFailed.title"),
+      description: reason,
+      variant: "error",
+    })
+  }
+
+  const finishRecording = async () => {
+    const handle = recording
+    recording = undefined
+    if (!handle) return
+    setVoiceState("transcribing")
+    try {
+      const recorded = await handle.stop()
+      if (!recorded) {
+        showToast({
+          title: language.t("prompt.toast.voiceTooShort.title"),
+          description: language.t("prompt.toast.voiceTooShort.description"),
+        })
+        return
+      }
+      const result = await transcribe(recorded.audio, voiceEndpoint)
+      if (!result.text) {
+        showToast({
+          title: language.t("prompt.toast.voiceEmpty.title"),
+          description: language.t("prompt.toast.voiceEmpty.description"),
+        })
+        return
+      }
+      addPart({ type: "text", content: result.text })
+      if (result.noSpeechProb !== undefined && result.noSpeechProb > NO_SPEECH_SUSPECT) {
+        showToast({
+          title: language.t("prompt.toast.voiceEmpty.title"),
+          description: language.t("prompt.toast.voiceEmpty.description"),
+        })
+      }
+    } catch (error) {
+      voiceFailed(error instanceof VoiceError || error instanceof Error ? error.message : String(error))
+    } finally {
+      setVoiceState("idle")
+    }
+  }
+
+  const toggleVoice = async () => {
+    if (voiceState() === "transcribing") return
+    if (voiceState() === "recording") {
+      await finishRecording()
+      return
+    }
+    try {
+      recording = await startRecording(() => void finishRecording())
+      setVoiceState("recording")
+    } catch (error) {
+      voiceFailed(error instanceof VoiceError || error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  onCleanup(() => {
+    void recording?.cancel()
+    recording = undefined
+  })
+
+  const voiceLabel = () =>
+    voiceState() === "recording"
+      ? language.t("prompt.action.voice.stop")
+      : voiceState() === "transcribing"
+        ? language.t("prompt.action.voice.transcribing")
+        : language.t("prompt.action.voice.start")
+
+  const voiceButton = () => (
+    <Show when={voiceEndpoint !== ""}>
+      <Tooltip placement="top" value={voiceLabel()}>
+        <IconButton
+          data-action="prompt-voice"
+          data-voice-state={voiceState()}
+          type="button"
+          variant="ghost"
+          class="size-8"
+          disabled={voiceState() === "transcribing"}
+          icon={voiceState() === "recording" ? "microphone-recording" : "microphone"}
+          aria-pressed={voiceState() === "recording"}
+          aria-label={voiceLabel()}
+          onClick={() => void toggleVoice()}
+        />
+      </Tooltip>
+    </Show>
+  )
+
   const fileAttachmentInput = () => (
     <input
       ref={(el) => (fileInputRef = el)}
@@ -1609,6 +1707,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     </div>
                   </Show>
                 </div>
+                {voiceButton()}
                 <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
                   <IconButton
                     data-action="prompt-submit"
@@ -1676,7 +1775,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               onMouseDown={(e) => {
                 const target = e.target
                 if (!(target instanceof HTMLElement)) return
-                if (target.closest('[data-action="prompt-attach"], [data-action="prompt-submit"]')) {
+                if (
+                  target.closest(
+                    '[data-action="prompt-attach"], [data-action="prompt-submit"], [data-action="prompt-voice"]',
+                  )
+                ) {
                   return
                 }
                 editorRef?.focus()
@@ -1752,6 +1855,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 />
 
                 <div class="flex items-center gap-1 pointer-events-auto">
+                  {voiceButton()}
                   <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
                     <IconButton
                       data-action="prompt-submit"

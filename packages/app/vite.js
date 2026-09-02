@@ -12,6 +12,11 @@ const channel = (() => {
   return "dev"
 })()
 
+// Speech-to-text endpoint for the prompt's microphone button. Empty (the
+// default) hides the button entirely, so a stock build behaves as before; a
+// deployment that has such an endpoint points this at it, e.g. "/stt".
+const voiceSttUrl = process.env.OPENCODE_VOICE_STT_URL ?? ""
+
 /**
  * @type {import("vite").PluginOption}
  */
@@ -27,6 +32,7 @@ export default [
         },
         define: {
           "import.meta.env.VITE_OPENCODE_CHANNEL": JSON.stringify(channel),
+          "import.meta.env.VITE_OPENCODE_VOICE_STT_URL": JSON.stringify(voiceSttUrl),
         },
         worker: {
           format: "es",
