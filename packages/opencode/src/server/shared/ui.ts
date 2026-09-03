@@ -52,11 +52,43 @@ function notFound() {
   return HttpServerResponse.jsonUnsafe({ error: "Not Found" }, { status: 404 })
 }
 
+export function injectVoiceConfig(body: string, env: Record<string, string | undefined> = process.env) {
+  const batchUrl = voicePath(env.OPENCODE_VOICE_STT_URL)
+  const realtimeUrl = voicePath(env.OPENCODE_VOICE_MODE_URL)
+  if (!batchUrl && !realtimeUrl) return body
+  const silence = Number(env.OPENCODE_VOICE_SILENCE_MS)
+  const config = {
+    ...(batchUrl
+      ? {
+          dictation: {
+            enabled: true,
+            batchUrl,
+            ...(Number.isFinite(silence) ? { silenceMs: Math.min(5000, Math.max(300, Math.round(silence))) } : {}),
+          },
+        }
+      : {}),
+    ...(realtimeUrl ? { mode: { enabled: true, realtimeUrl } } : {}),
+  }
+  const meta = `<meta name="opencode-voice-config" content="${encodeURIComponent(JSON.stringify(config))}" />`
+  if (/<meta\s+name=["']opencode-voice-config["'][^>]*>/i.test(body)) {
+    return body.replace(/<meta\s+name=["']opencode-voice-config["'][^>]*>/i, meta)
+  }
+  return body.replace(/<\/head>/i, `${meta}</head>`)
+}
+
+function voicePath(value: string | undefined): string | undefined {
+  const path = value?.trim()
+  if (!path?.startsWith("/") || path.startsWith("//") || path.includes("\\")) return undefined
+  return path
+}
+
 function embeddedUIResponse(file: string, body: Uint8Array) {
   const mime = FSUtil.mimeType(file)
   const headers = new Headers({ "content-type": mime })
   if (mime.startsWith("text/html")) {
-    headers.set("content-security-policy", cspForHtml(new TextDecoder().decode(body)))
+    const html = injectVoiceConfig(new TextDecoder().decode(body))
+    headers.set("content-security-policy", cspForHtml(html))
+    return HttpServerResponse.text(html, { headers })
   }
   return HttpServerResponse.raw(body, { headers })
 }
@@ -94,7 +126,7 @@ export function serveUIEffect(
     const headers = proxyResponseHeaders(response.headers)
 
     if (response.headers["content-type"]?.includes("text/html")) {
-      const body = yield* response.text
+      const body = injectVoiceConfig(yield* response.text)
       headers.set("Content-Security-Policy", cspForHtml(body))
       return HttpServerResponse.text(body, { status: response.status, headers })
     }

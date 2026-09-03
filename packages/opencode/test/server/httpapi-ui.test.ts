@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import * as Log from "@opencode-ai/core/util/log"
 import { ConfigProvider, Effect, Layer } from "effect"
@@ -17,7 +17,7 @@ import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { ServerAuth } from "../../src/server/auth"
 import { authorizationRouterMiddleware } from "../../src/server/routes/instance/httpapi/middleware/authorization"
 import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
-import { serveEmbeddedUIEffect, serveUIEffect } from "../../src/server/shared/ui"
+import { injectVoiceConfig, serveEmbeddedUIEffect, serveUIEffect } from "../../src/server/shared/ui"
 import { testEffect } from "../lib/effect"
 
 void Log.init({ print: false })
@@ -182,6 +182,37 @@ function httpClient(response: Response, onRequest?: (request: HttpClientRequest.
 function responseText(response: Response) {
   return Effect.promise(() => response.text())
 }
+
+describe("voice UI runtime configuration", () => {
+  const html = '<html><head><meta name="opencode-voice-config" content="" /></head><body></body></html>'
+
+  test("injects safe same-origin paths and bounded silence", () => {
+    const result = injectVoiceConfig(html, {
+      OPENCODE_VOICE_STT_URL: "/chat/stt",
+      OPENCODE_VOICE_SILENCE_MS: "100",
+      OPENCODE_VOICE_MODE_URL: "/chat/voice/ws",
+    })
+    const content = result.match(/opencode-voice-config" content="([^"]+)/)?.[1]
+    expect(content).toBeDefined()
+    expect(JSON.parse(decodeURIComponent(content!))).toEqual({
+      dictation: { enabled: true, batchUrl: "/chat/stt", silenceMs: 300 },
+      mode: { enabled: true, realtimeUrl: "/chat/voice/ws" },
+    })
+  })
+
+  test("does not inject external or protocol-relative paths", () => {
+    expect(
+      injectVoiceConfig(html, {
+        OPENCODE_VOICE_STT_URL: "https://example.com/stt",
+        OPENCODE_VOICE_MODE_URL: "//example.com/ws",
+      }),
+    ).toBe(html)
+  })
+
+  test("leaves non-marker HTML unchanged without capabilities", () => {
+    expect(injectVoiceConfig("<html>opencode</html>", {})).toBe("<html>opencode</html>")
+  })
+})
 
 describe("HttpApi UI fallback", () => {
   it.live("serves the web UI through the HTTP API app", () =>
