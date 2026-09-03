@@ -30,9 +30,11 @@ and `P` covers platform/deployment work.
   including barge-in effects and turn deduplication, are implemented. WebSocket,
   UI, audio playback, and the backend adapter remain capability-gated.
 - P2/P3/P4/P5: probed live on stage 2026-09-04, see `VOICE_STAGE_PROBE.md`.
-  P2 is blocked outside this repository — the ingress basic-auth lock strips the
-  `Authorization` header, so incident-copilot's only source of identity never
-  reaches the pod and `/chat/stt` answers 401 to everyone. The gateway offers
+  P2 is half-answered as of 2026-09-04: incident-copilot removed the identity
+  gate (MR !98), so `/chat/stt` now answers 200 with a transcript in about 1.2 s
+  and dictation runs against the real endpoint. The `Authorization` header still
+  does not reach the pod, so the acceptance below — identity reused from ingress
+  — is not met, and the endpoint is guarded by the shared credential alone. The gateway offers
   neither streaming transcription nor a realtime API nor any TTS voice, which
   leaves Milestone 2 and Milestone 3 without a backend; batch dictation is
   unaffected and measured at 0.85-1.33 s.

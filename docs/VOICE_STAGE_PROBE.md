@@ -59,6 +59,34 @@ fixes, in the order they should be weighed:
 
 Choosing between them is incident-copilot's call, not ours.
 
+## P2 — re-probed 2026-09-04 after MR !98
+
+incident-copilot merged `fix/identity-must-not-gate` (commit `480cee0`), which
+stops identity from gating the surface. Verified from outside, not taken on
+trust:
+
+```
+POST /chat/stt (audio/wav, ingress basic-auth) -> 200
+{"text":"Проверка распознавания речи на стенде Incident Copilot.",
+ "language":"ru","model":"whisper-turbo-local-preview","latency_ms":1179}
+
+GET /chat/whoami -> 200
+{"outcome":"basic_absent", ...}
+```
+
+So dictation from native OpenCode works against the real endpoint now, at about
+1.2 s for a 3.2 s phrase — the local stand-in is no longer the only way to run
+it. The header still does not reach the pod, so the identity half of P2 is
+untouched and its issue stays open.
+
+What this costs, and it is worth stating plainly: the endpoint is now guarded by
+the shared ingress credential alone. Everyone who can open the chat can spend
+recognition quota, and nothing records which engineer did. incident-copilot's
+own follow-up (issue #2) notes that inside the namespace `/chat/stt`,
+`DELETE /chat/session/{id}` and the sidecar's port 4096 have no lock at all.
+That is their trade to make; it changes what P2 means for us from "identity
+reused" to "identity absent, availability restored".
+
 ## P3 — no streaming transcription on the gateway
 
 The LLMOps gateway publishes 67 models. Exactly two touch audio:
