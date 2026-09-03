@@ -689,6 +689,12 @@ export const dict = {
   "settings.general.row.showSessionProgressBar.title": "Показывать индикатор прогресса сессии",
   "settings.general.row.showSessionProgressBar.description":
     "Показывать анимированный индикатор прогресса вверху сессии, когда агент работает",
+  "settings.general.row.dictation.title": "Диктовка",
+  "settings.general.row.dictation.description":
+    "Чем заканчивается сеанс диктовки. Непрерывные режимы держат микрофон открытым между паузами и дописывают каждую фразу в черновик",
+  "settings.general.row.dictation.option.utterance": "Одна фраза за нажатие",
+  "settings.general.row.dictation.option.idle": "До длинной паузы",
+  "settings.general.row.dictation.option.manual": "Пока не остановлю или не отправлю",
   "settings.general.row.wayland.title": "Использовать нативный Wayland",
   "settings.general.row.wayland.description": "Отключить X11 fallback на Wayland. Требуется перезапуск.",
   "settings.general.row.wayland.tooltip":

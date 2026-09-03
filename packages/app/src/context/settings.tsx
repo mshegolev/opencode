@@ -18,6 +18,19 @@ export interface SoundSettings {
   errors: string
 }
 
+/**
+ * How a dictation session ends.
+ *
+ * `utterance` is the original behavior: one press captures one phrase and the
+ * first pause ends it. The other two keep the microphone open across pauses,
+ * appending each recognized phrase to the draft, and differ only in what closes
+ * the session — a long silence, or nothing but the user.
+ */
+export type DictationMode = "utterance" | "idle" | "manual"
+
+/** How long a pause must run to end dictation in `idle` mode. */
+export const DICTATION_IDLE_MS = 8000
+
 export interface Settings {
   general: {
     autoSave: boolean
@@ -33,6 +46,7 @@ export interface Settings {
     editToolPartsExpanded: boolean
     showSessionProgressBar: boolean
     showCustomAgents: boolean
+    dictation: DictationMode
     newLayoutDesigns?: boolean
   }
   updates: {
@@ -121,6 +135,7 @@ const defaultSettings: Settings = {
     editToolPartsExpanded: false,
     showSessionProgressBar: true,
     showCustomAgents: false,
+    dictation: "idle",
   },
   updates: {
     startup: true,
@@ -247,6 +262,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         showCustomAgents: withFallback(() => store.general?.showCustomAgents, defaultSettings.general.showCustomAgents),
         setShowCustomAgents(value: boolean) {
           setStore("general", "showCustomAgents", value)
+        },
+        dictation: withFallback(() => store.general?.dictation, defaultSettings.general.dictation),
+        setDictation(value: DictationMode) {
+          setStore("general", "dictation", value)
         },
         newLayoutDesigns: withFallback(() => store.general?.newLayoutDesigns, newLayoutDesignsDefault),
         setNewLayoutDesigns(value: boolean) {

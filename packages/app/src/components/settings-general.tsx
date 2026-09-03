@@ -9,6 +9,7 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { showToast } from "@/utils/toast"
+import { voiceConfig } from "@/components/prompt-input/voice-config"
 import { useParams } from "@solidjs/router"
 import { useLanguage } from "@/context/language"
 import { usePermission } from "@/context/permission"
@@ -26,6 +27,7 @@ import {
   terminalFontFamily,
   terminalInput,
   useSettings,
+  type DictationMode,
 } from "@/context/settings"
 import { decode64 } from "@/utils/base64"
 import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
@@ -83,6 +85,15 @@ const playDemoSound = (id: string | undefined) => {
 }
 
 export const SettingsGeneral: Component = () => {
+  // Only offered where a speech endpoint exists — elsewhere there is no
+  // microphone button for the setting to govern.
+  const dictationOptions = () =>
+    [
+      { value: "utterance" as const, label: language.t("settings.general.row.dictation.option.utterance") },
+      { value: "idle" as const, label: language.t("settings.general.row.dictation.option.idle") },
+      { value: "manual" as const, label: language.t("settings.general.row.dictation.option.manual") },
+    ] satisfies Array<{ value: DictationMode; label: string }>
+
   const theme = useTheme()
   const language = useLanguage()
   const permission = usePermission()
@@ -401,6 +412,25 @@ export const SettingsGeneral: Component = () => {
             />
           </div>
         </SettingsRow>
+
+        <Show when={voiceConfig().dictation}>
+          <SettingsRow
+            title={language.t("settings.general.row.dictation.title")}
+            description={language.t("settings.general.row.dictation.description")}
+          >
+            <Select
+              data-action="settings-dictation"
+              options={dictationOptions()}
+              current={dictationOptions().find((o) => o.value === settings.general.dictation())}
+              value={(o) => o.value}
+              label={(o) => o.label}
+              onSelect={(option) => option && settings.general.setDictation(option.value)}
+              variant="secondary"
+              size="small"
+              triggerVariant="settings"
+            />
+          </SettingsRow>
+        </Show>
 
         <SettingsRow
           title={language.t("settings.general.row.newLayoutDesigns.title")}

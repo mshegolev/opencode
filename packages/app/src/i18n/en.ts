@@ -821,6 +821,12 @@ export const dict = {
   "settings.general.row.showSessionProgressBar.title": "Show session progress bar",
   "settings.general.row.showSessionProgressBar.description":
     "Display the animated progress bar at the top of the session when the agent is working",
+  "settings.general.row.dictation.title": "Dictation",
+  "settings.general.row.dictation.description":
+    "How a dictation session ends. Continuous modes keep the microphone open across pauses and append each phrase to the draft",
+  "settings.general.row.dictation.option.utterance": "One phrase per press",
+  "settings.general.row.dictation.option.idle": "Until a long pause",
+  "settings.general.row.dictation.option.manual": "Until I stop or send",
   "settings.general.row.newLayoutDesigns.title": "New layout and designs",
   "settings.general.row.newLayoutDesigns.description": "Enable the redesigned layout, home, composer, and session UI",
   "settings.general.row.pinchZoom.title": "Pinch to zoom",

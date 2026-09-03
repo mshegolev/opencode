@@ -51,7 +51,7 @@ import { Persist, persisted } from "@/utils/persist"
 import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { useSettings } from "@/context/settings"
+import { DICTATION_IDLE_MS, useSettings } from "@/context/settings"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
@@ -1099,7 +1099,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const [voiceModeOpen, setVoiceModeOpen] = createSignal(false)
   const [voiceStore, setVoiceStore] = createStore({
     state: "idle" as "idle" | "requesting" | "listening" | "finalizing",
+    // Continuous dictation keeps listening while earlier phrases are still being
+    // recognized, so "is anything in flight" is a count, not a state.
+    pending: 0,
   })
+  const dictation = () => settings.general.dictation()
+  const continuous = () => dictation() !== "utterance"
   let recording: Awaited<ReturnType<typeof startRecording>> | undefined
 
   const voiceFailed = (reason: string) => {
@@ -1108,6 +1113,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       description: reason,
       variant: "error",
     })
+  }
+
+  const applyTranscript = async (recorded: { audio: Blob; seconds: number }) => {
+    if (!voice) return
+    const result = await transcribe(recorded.audio, voice.batchUrl)
+    if (!result.text) {
+      showToast({
+        title: language.t("prompt.toast.voiceEmpty.title"),
+        description: language.t("prompt.toast.voiceEmpty.description"),
+      })
+      return
+    }
+    addPart({ type: "text", content: result.text, start: 0, end: result.text.length })
+    if (result.noSpeechProb !== undefined && result.noSpeechProb > NO_SPEECH_SUSPECT) {
+      showToast({
+        title: language.t("prompt.toast.voiceEmpty.title"),
+        description: language.t("prompt.toast.voiceEmpty.description"),
+      })
+    }
   }
 
   const finishRecording = async () => {
@@ -1124,26 +1148,27 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         })
         return
       }
-      if (!voice) return
-      const result = await transcribe(recorded.audio, voice.batchUrl)
-      if (!result.text) {
-        showToast({
-          title: language.t("prompt.toast.voiceEmpty.title"),
-          description: language.t("prompt.toast.voiceEmpty.description"),
-        })
-        return
-      }
-      addPart({ type: "text", content: result.text, start: 0, end: result.text.length })
-      if (result.noSpeechProb !== undefined && result.noSpeechProb > NO_SPEECH_SUSPECT) {
-        showToast({
-          title: language.t("prompt.toast.voiceEmpty.title"),
-          description: language.t("prompt.toast.voiceEmpty.description"),
-        })
-      }
+      await applyTranscript(recorded)
     } catch (error) {
       voiceFailed(error instanceof VoiceError || error instanceof Error ? error.message : String(error))
     } finally {
       setVoiceStore("state", "idle")
+    }
+  }
+
+  /** Sends the phrase just spoken while the microphone stays open for the next. */
+  const flushSegment = async () => {
+    const handle = recording
+    if (!handle) return
+    const recorded = handle.flush()
+    if (!recorded) return
+    setVoiceStore("pending", (count) => count + 1)
+    try {
+      await applyTranscript(recorded)
+    } catch (error) {
+      voiceFailed(error instanceof VoiceError || error instanceof Error ? error.message : String(error))
+    } finally {
+      setVoiceStore("pending", (count) => Math.max(0, count - 1))
     }
   }
 
@@ -1158,8 +1183,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     try {
       recording = await startRecording({
         silenceMs: voice.silenceMs,
-        onLimit: () => void finishRecording(),
-        onSilence: () => void finishRecording(),
+        // Only `idle` mode arms the watchdog, so `onIdle` needs no mode check.
+        idleMs: dictation() === "idle" ? DICTATION_IDLE_MS : undefined,
+        onLimit: () => void (continuous() ? flushSegment() : finishRecording()),
+        onSilence: () => void (continuous() ? flushSegment() : finishRecording()),
+        onIdle: () => void finishRecording(),
       })
       setVoiceStore("state", "listening")
     } catch (error) {
@@ -1173,6 +1201,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     recording = undefined
     setVoiceStore("state", "idle")
     await handle?.cancel()
+  }
+
+  /**
+   * Sending ends dictation. The audio captured since the last pause is dropped
+   * rather than raced against the submit: what the user sees in the box is what
+   * gets sent, and a phrase finished more than a pause ago is already in it.
+   */
+  const endDictationForSubmit = () => {
+    const handle = recording
+    if (!handle) return
+    recording = undefined
+    setVoiceStore("state", "idle")
+    void handle.cancel()
   }
 
   onCleanup(() => {
@@ -1189,22 +1230,41 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           ? language.t("prompt.action.voice.transcribing")
           : language.t("prompt.action.voice.start")
 
+  const recognizing = () => voiceStore.state === "finalizing" || voiceStore.pending > 0
+
   const voiceButton = () => (
     <>
       <Show when={voice}>
         <Tooltip placement="top" value={voiceLabel()}>
-          <IconButton
-            data-action="prompt-voice"
-            data-voice-state={voiceStore.state}
-            type="button"
-            variant="ghost"
-            class="size-8"
-            disabled={voiceStore.state === "requesting" || voiceStore.state === "finalizing"}
-            icon={voiceStore.state === "listening" ? "microphone-recording" : "microphone"}
-            aria-pressed={voiceStore.state === "listening"}
-            aria-label={voiceLabel()}
-            onClick={() => void toggleVoice()}
-          />
+          <div class="relative flex items-center">
+            <IconButton
+              data-action="prompt-voice"
+              data-voice-state={voiceStore.state}
+              data-voice-recognizing={recognizing() ? "true" : undefined}
+              type="button"
+              variant="ghost"
+              class="size-8"
+              disabled={voiceStore.state === "requesting" || voiceStore.state === "finalizing"}
+              icon={voiceStore.state === "listening" ? "microphone-recording" : "microphone"}
+              aria-pressed={voiceStore.state === "listening"}
+              aria-label={voiceLabel()}
+              onClick={() => void toggleVoice()}
+            />
+            {/* Recording has to be obvious without comparing which icon is showing. */}
+            <Show when={voiceStore.state === "listening"}>
+              <span
+                aria-hidden="true"
+                class="pointer-events-none absolute inset-0 rounded-md ring-2 ring-current opacity-60 animate-pulse"
+              />
+            </Show>
+            {/* Recognition can take seconds; without this it looks like nothing happened. */}
+            <Show when={recognizing()}>
+              <span
+                aria-hidden="true"
+                class="pointer-events-none absolute inset-1 rounded-full border-2 border-current border-t-transparent opacity-70 animate-spin"
+              />
+            </Show>
+          </div>
         </Tooltip>
       </Show>
       <Show when={voice && voiceStore.state === "listening"}>
@@ -1287,6 +1347,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       </Tooltip>
     </Show>
   )
+
+  /** Every path that sends a message goes through here, so dictation ends once. */
+  const submitPrompt = (event: Event) => {
+    endDictationForSubmit()
+    return handleSubmit(event)
+  }
 
   const submitVoiceTranscript = (text: string) => {
     const value = text.trim()
@@ -1453,7 +1519,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       ) {
         return
       }
-      void handleSubmit(event)
+      void submitPrompt(event)
     }
   }
 
@@ -1636,7 +1702,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           <div class="flex flex-col gap-3">
             <DockShellForm
               data-component={newSession() ? "session-new-composer" : "session-composer"}
-              onSubmit={handleSubmit}
+              onSubmit={submitPrompt}
               classList={{
                 "group/prompt-input min-h-[96px] w-full rounded-xl bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]": true,
                 "border-icon-info-active border-dashed": store.draggingType !== null,
@@ -1810,7 +1876,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         </Match>
         <Match when>
           <DockShellForm
-            onSubmit={handleSubmit}
+            onSubmit={submitPrompt}
             classList={{
               "group/prompt-input": true,
               "focus-within:shadow-xs-border": true,
