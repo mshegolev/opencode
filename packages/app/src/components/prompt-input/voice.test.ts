@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { VoiceError, downsample, encodeWav, mergeChunks, transcribe, TARGET_SAMPLE_RATE } from "./voice"
+import { VoiceError, downsample, encodeWav, mergeChunks, transcribe, TARGET_SAMPLE_RATE, type Fetcher } from "./voice"
 
 function readAscii(view: DataView, offset: number, length: number) {
   let out = ""
@@ -61,7 +61,7 @@ describe("encodeWav", () => {
 describe("transcribe", () => {
   const wav = new Blob([new Uint8Array(44)], { type: "audio/wav" })
 
-  async function failure(fetcher: typeof fetch) {
+  async function failure(fetcher: Fetcher) {
     let caught: unknown
     try {
       await transcribe(wav, "/stt", fetcher)
@@ -74,12 +74,8 @@ describe("transcribe", () => {
 
   test("posts the audio and returns the recognized text", async () => {
     let seen: { url: string; method?: string; headers: Headers } | undefined
-    const fetcher: typeof fetch = async (url, init) => {
-      seen = {
-        url: typeof url === "string" ? url : url instanceof URL ? url.href : url.url,
-        method: init?.method,
-        headers: new Headers(init?.headers),
-      }
+    const fetcher: Fetcher = async (url, init) => {
+      seen = { url, method: init.method, headers: new Headers(init.headers) }
       return new Response(JSON.stringify({ text: " hello ", model: "m", latency_ms: 12, no_speech_prob: 0.1 }), {
         status: 200,
         headers: { "content-type": "application/json" },

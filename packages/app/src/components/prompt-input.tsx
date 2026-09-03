@@ -1126,7 +1126,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         })
         return
       }
-      addPart({ type: "text", content: result.text })
+      addPart({ type: "text", content: result.text, start: 0, end: result.text.length })
       if (result.noSpeechProb !== undefined && result.noSpeechProb > NO_SPEECH_SUSPECT) {
         showToast({
           title: language.t("prompt.toast.voiceEmpty.title"),

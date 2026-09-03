@@ -105,11 +105,10 @@ export function encodeWav(samples: Float32Array, rate: number): Blob {
   return new Blob([buffer], { type: "audio/wav" })
 }
 
-export async function transcribe(
-  audio: Blob,
-  endpoint: string,
-  fetcher: typeof fetch = fetch,
-): Promise<VoiceTranscript> {
+/** Just the part of `fetch` this module uses, so tests can stand in for it. */
+export type Fetcher = (input: string, init: RequestInit) => Promise<Response>
+
+export async function transcribe(audio: Blob, endpoint: string, fetcher: Fetcher = fetch): Promise<VoiceTranscript> {
   let response: Response
   try {
     response = await fetcher(endpoint, {
