@@ -15,7 +15,15 @@ and `P` covers platform/deployment work.
   finalizes without a second click, and the transcript lands in the composer
   without being submitted. That pass also raised D3 and D4.
 - D3/D4: raised by the first live use — the running state is too quiet to see,
-  and one click per utterance is too many for dictating a paragraph.
+  and one click per utterance is too many for dictating a paragraph. Both are
+  implemented; the continuous path has unit coverage of the recorder but has not
+  been exercised against real pauses in a browser.
+- D5: raised by the target audience including Windows Chrome. Two cross-platform
+  defects found by reading rather than running were fixed at once — an insecure
+  origin was reported as a browser without a microphone API, and the dictation
+  shortcut was bound to a letter, which under a Cyrillic layout binds to a key
+  the user cannot press. The fixed speech threshold is the one that remains, and
+  it fails silently, which is why it is a task rather than a note.
 - P1: runtime meta configuration and server-side injection are implemented with
   build-time fallback.
 - V1/V4: the typed client event parser and pure Voice Mode state machine,
@@ -71,6 +79,21 @@ and `P` covers platform/deployment work.
   - Acceptance: a user can dictate several sentences with natural pauses without
     touching the button, the draft accumulates in order, and nothing is
     submitted until the user submits it.
+
+- [ ] **D5 — Speech detection must survive an unfamiliar microphone**
+  - The speech threshold is a fixed RMS constant (`DEFAULT_SPEECH_THRESHOLD`),
+    chosen against one microphone on one machine. Gain varies widely across
+    Windows laptops and headsets.
+  - Too high and no speech is ever detected: the silence rule never fires, so
+    continuous dictation never cuts a phrase and per-utterance never finalizes —
+    the button looks dead while the microphone is in fact open. Too low and room
+    noise reads as speech, so a phrase never ends.
+  - Calibrate against the noise floor measured in the first moments of capture,
+    or expose the threshold as a setting, or both; and give the user a way to
+    see that speech is being heard, so a mis-set threshold is diagnosable rather
+    than mysterious.
+  - Acceptance: dictation finalizes a phrase on a quiet laptop microphone and in
+    a noisy room without either being reconfigured by hand.
 
 - [ ] **P2 — Native voice authentication**
   - Remove the accidental dependency on a separate chat-login cookie.
