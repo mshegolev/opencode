@@ -56,8 +56,12 @@ to a speech-to-text endpoint and inserts the recognized text at the cursor. It i
 off by default and appears only when the build is given an endpoint:
 
 ```bash
-OPENCODE_VOICE_STT_URL=/stt bun run build
+VITE_OPENCODE_VOICE_STT_URL=/stt bun run build
 ```
+
+A deployment can configure the same artifact at runtime instead, which is what
+the server does when `OPENCODE_VOICE_STT_URL` is set for it; the build-time
+variable above is the local fallback.
 
 The endpoint receives a `POST` with a raw `audio/wav` body (16 kHz, mono, 16-bit,
 assembled in the browser rather than by `MediaRecorder`, whose container differs
@@ -65,5 +69,25 @@ per browser) and answers with JSON: `{ "text": "...", "model": "...",
 "latency_ms": 0, "no_speech_prob": 0.0 }`. A failing endpoint must say why in
 `detail` — the button shows that reason instead of silently inserting nothing.
 
-Recording stops on the second click or after 60 seconds. Nothing is stored: the
-audio lives only in the request, and the text goes straight into the prompt.
+Recording finalizes by itself after 1.2 s of silence once speech has been heard,
+and can also be stopped by hand or discarded with the cancel button; 60 seconds
+is the hard ceiling. Nothing is stored: the audio lives only in the request, and
+the text goes straight into the prompt.
+
+### Running it locally
+
+The endpoint must be same-origin — an absolute URL is rejected, so no public STT
+service can be pointed at directly. `script/voice-stt-dev.py` answers the same
+contract from this machine using faster-whisper, and the dev server proxies
+`/chat/stt` to it:
+
+```bash
+python3 script/voice-stt-dev.py                    # terminal 1
+VITE_OPENCODE_VOICE_STT_URL=/chat/stt bun dev:web  # terminal 2
+```
+
+It installs nothing; if `faster_whisper` is missing it prints the two commands
+that provide it. The default model is `large-v3-turbo`, the same class the
+deployment uses, which costs about 7 s per phrase on an M1 Pro because
+CTranslate2 runs on the CPU — `VOICE_STT_MODEL=small` trades accuracy for a
+faster loop. `VOICE_STT_DEV_PORT` moves the port on both sides.
