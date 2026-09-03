@@ -16,6 +16,13 @@ and `P` covers platform/deployment work.
 - V1/V4: the typed client event parser and pure Voice Mode state machine,
   including barge-in effects and turn deduplication, are implemented. WebSocket,
   UI, audio playback, and the backend adapter remain capability-gated.
+- P2/P3/P4/P5: probed live on stage 2026-09-04, see `VOICE_STAGE_PROBE.md`.
+  P2 is blocked outside this repository — the ingress basic-auth lock strips the
+  `Authorization` header, so incident-copilot's only source of identity never
+  reaches the pod and `/chat/stt` answers 401 to everyone. The gateway offers
+  neither streaming transcription nor a realtime API nor any TTS voice, which
+  leaves Milestone 2 and Milestone 3 without a backend; batch dictation is
+  unaffected and measured at 0.85-1.33 s.
 
 ## Milestone 1: reliable dictation
 
@@ -52,6 +59,9 @@ and `P` covers platform/deployment work.
   - Record whether WebSocket, WebRTC, or chunked HTTP is supported.
   - Acceptance: evidence from stage determines the adapter contract; no browser
     provider credentials are introduced.
+  - Answered 2026-09-04 except limits and cancellation: no `/v1/realtime`, and
+    `stream=true` returns one non-streamed body with an SSE frame stringified
+    into `text`. Batch stays the only contract.
 
 - [ ] **V1 — Versioned realtime protocol**
   - Specify messages, binary framing, turn IDs, error codes, and reconnect rules.
