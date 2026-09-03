@@ -94,10 +94,28 @@ OPENCODE_VOICE_STT_URL=/chat/stt bun dev:web                           # termina
 
 Then open <http://localhost:3000/>. All three are needed and each answers a
 different address: in dev the page fetches the API from `localhost:4096`
-(`src/entry.tsx`), while the microphone posts to a path relative to the *page*,
+(`src/entry.tsx`), while the microphone posts to a path relative to the _page_,
 which is why the stand-in hangs off the dev server rather than the backend.
 Without the server on 4096 the composer never renders and the microphone has
 nowhere to appear — an empty prompt area is that, not a voice problem.
+
+#### Against a deployment instead
+
+The stand-in exists because the endpoint must be same-origin, which is also what
+stops a page from sending microphone audio to another host. To use a real
+deployment, aim the dev server's proxy at it rather than the client: the browser
+still only ever talks to `localhost`.
+
+```bash
+VOICE_STT_TARGET=https://<host> \
+VOICE_STT_AUTH="$(...)" \
+OPENCODE_VOICE_STT_URL=/chat/stt bun dev:web
+```
+
+`VOICE_STT_AUTH` is `user:password` for a target behind HTTP basic auth — the
+browser has no credential for an origin it never sees, so the proxy adds the
+header. Read it from wherever that deployment's credential actually lives; never
+write it into a file here. Terminal 1 is then unnecessary.
 
 It installs nothing; if `faster_whisper` is missing it prints the two commands
 that provide it. The default model is `small`, which answers a short phrase in
