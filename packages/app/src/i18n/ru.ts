@@ -69,6 +69,7 @@ export const dict = {
   "command.agent.cycle.reverse.description": "Переключиться к предыдущему агенту",
   "command.model.variant.cycle": "Цикл режимов мышления",
   "command.model.variant.cycle.description": "Переключиться к следующему уровню усилий",
+  "command.prompt.voice.toggle": "Начать или остановить диктовку",
   "command.prompt.mode.shell": "Оболочка",
   "command.prompt.mode.normal": "Промпт",
   "command.permissions.autoaccept.enable": "Автоматически принимать разрешения",

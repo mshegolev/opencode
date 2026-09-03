@@ -1230,6 +1230,24 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           ? language.t("prompt.action.voice.transcribing")
           : language.t("prompt.action.voice.start")
 
+  // Registered here rather than in the "prompt-input" block above, which is
+  // evaluated before `toggleVoice` exists. Offered only where dictation is
+  // configured, so the shortcuts screen does not list a key that does nothing.
+  command.register("prompt-voice", () =>
+    voice
+      ? [
+          {
+            id: "prompt.voice.toggle",
+            title: language.t("command.prompt.voice.toggle"),
+            category: language.t("command.category.session"),
+            keybind: "mod+shift+u",
+            disabled: voiceStore.state === "requesting" || voiceStore.state === "finalizing",
+            onSelect: () => void toggleVoice(),
+          },
+        ]
+      : [],
+  )
+
   const recognizing = () => voiceStore.state === "finalizing" || voiceStore.pending > 0
 
   const voiceButton = () => (
