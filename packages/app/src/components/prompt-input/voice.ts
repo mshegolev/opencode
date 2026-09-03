@@ -1,9 +1,10 @@
+import voiceWorkletUrl from "./voice-worklet.ts?worker&url"
+
 /**
  * Voice input for the prompt: record from the microphone in the browser, send
  * the audio to a speech-to-text endpoint, get text back.
  *
- * The endpoint is configured at build time (`OPENCODE_VOICE_STT_URL`, exposed as
- * `import.meta.env.VITE_OPENCODE_VOICE_STT_URL`); with no endpoint configured the
+ * The endpoint is configured by the caller; with no endpoint configured the
  * button never appears, so a default build behaves exactly as before.
  *
  * Audio leaves the browser as 16 kHz mono 16-bit WAV, assembled here from raw
@@ -18,6 +19,9 @@ export const MAX_RECORDING_SECONDS = 60
 export const MIN_RECORDING_SECONDS = 0.5
 /** Above this the endpoint says it heard speech, but does not believe it. */
 export const NO_SPEECH_SUSPECT = 0.6
+export const DEFAULT_SILENCE_MS = 1200
+export const DEFAULT_SPEECH_THRESHOLD = 0.015
+export const DEFAULT_MIN_SPEECH_MS = 160
 
 export type VoiceTranscript = {
   text: string
@@ -153,12 +157,76 @@ type RecorderHandle = {
   cancel(): Promise<void>
 }
 
+export type VoiceActivityState = {
+  speechStarted: boolean
+  voicedMs: number
+  lastVoiceAt?: number
+  finalized: boolean
+}
+
+export type VoiceActivityEvent = "speech-started" | "silence"
+
+export type RecorderOptions = {
+  silenceMs?: number
+  speechThreshold?: number
+  minSpeechMs?: number
+  onLimit?: () => void
+  onSpeechStart?: () => void
+  onSilence?: () => void
+}
+
+export type CaptureImplementation = "audio-worklet" | "script-processor"
+
+export function selectCaptureImplementation(
+  context: { audioWorklet?: { addModule: (url: string) => Promise<void> } },
+  workletNodeAvailable = "AudioWorkletNode" in globalThis,
+): CaptureImplementation {
+  return context.audioWorklet && workletNodeAvailable ? "audio-worklet" : "script-processor"
+}
+
+export function detectVoiceActivity(
+  state: VoiceActivityState,
+  samples: Float32Array,
+  sampleRate: number,
+  now: number,
+  options: Pick<RecorderOptions, "silenceMs" | "speechThreshold" | "minSpeechMs"> = {},
+): { state: VoiceActivityState; event?: VoiceActivityEvent } {
+  if (state.finalized) return { state }
+  const threshold = options.speechThreshold ?? DEFAULT_SPEECH_THRESHOLD
+  const silenceMs = options.silenceMs ?? DEFAULT_SILENCE_MS
+  const minSpeechMs = options.minSpeechMs ?? DEFAULT_MIN_SPEECH_MS
+  const voiced = rootMeanSquare(samples) >= threshold
+  const frameMs = (samples.length / sampleRate) * 1000
+  const voicedMs = voiced ? state.voicedMs + frameMs : state.speechStarted ? state.voicedMs : 0
+  const lastVoiceAt = voiced ? now : state.lastVoiceAt
+
+  if (!state.speechStarted && voicedMs >= minSpeechMs) {
+    return {
+      state: { speechStarted: true, voicedMs, lastVoiceAt: now, finalized: false },
+      event: "speech-started",
+    }
+  }
+  if (state.speechStarted && lastVoiceAt !== undefined && now - lastVoiceAt >= silenceMs) {
+    return {
+      state: { speechStarted: true, voicedMs, lastVoiceAt, finalized: true },
+      event: "silence",
+    }
+  }
+  return { state: { speechStarted: state.speechStarted, voicedMs, lastVoiceAt, finalized: false } }
+}
+
+function rootMeanSquare(samples: Float32Array) {
+  let sum = 0
+  for (const sample of samples) sum += sample * sample
+  return samples.length ? Math.sqrt(sum / samples.length) : 0
+}
+
 /**
  * Opens the microphone and captures mono PCM until stopped. Rejects with a
  * `VoiceError` when the browser has no microphone API or refuses access — a
  * denied permission and an absent device are different problems for the user.
  */
-export async function startRecording(onLimit?: () => void): Promise<RecorderHandle> {
+export async function startRecording(options: RecorderOptions | (() => void) = {}): Promise<RecorderHandle> {
   if (!navigator.mediaDevices?.getUserMedia) {
     throw new VoiceError("this browser exposes no microphone API", 0)
   }
@@ -174,32 +242,40 @@ export async function startRecording(onLimit?: () => void): Promise<RecorderHand
 
   const context = new AudioContext()
   const source = context.createMediaStreamSource(stream)
-  // ScriptProcessor is deprecated but needs no separate worklet file, which keeps
-  // the recorder a single module inside the bundle.
-  const processor = context.createScriptProcessor(4096, 1, 1)
   const chunks: Float32Array[] = []
   const sampleRate = context.sampleRate
   const startedAt = Date.now()
-
-  processor.onaudioprocess = (event) => {
-    chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)))
-  }
-  source.connect(processor)
-  processor.connect(context.destination)
-
+  const config = typeof options === "function" ? { onLimit: options } : options
+  let activity: VoiceActivityState = { speechStarted: false, voicedMs: 0, finalized: false }
   let released = false
+
+  const consume = (samples: Float32Array) => {
+    if (released) return
+    chunks.push(samples)
+    const next = detectVoiceActivity(activity, samples, sampleRate, Date.now(), config)
+    activity = next.state
+    if (next.event === "speech-started") config.onSpeechStart?.()
+    if (next.event === "silence") config.onSilence?.()
+  }
+
+  const capture = await createCapture(context, source, consume)
+
   const release = async () => {
     if (released) return
     released = true
     clearInterval(limitTimer)
-    processor.disconnect()
+    capture.disconnect()
     source.disconnect()
     for (const track of stream.getTracks()) track.stop()
     await context.close()
   }
 
+  let limitNotified = false
   const limitTimer = setInterval(() => {
-    if (Date.now() - startedAt >= MAX_RECORDING_SECONDS * 1000) onLimit?.()
+    if (!limitNotified && Date.now() - startedAt >= MAX_RECORDING_SECONDS * 1000) {
+      limitNotified = true
+      config.onLimit?.()
+    }
   }, 250)
 
   return {
@@ -214,6 +290,60 @@ export async function startRecording(onLimit?: () => void): Promise<RecorderHand
     async cancel() {
       await release()
       chunks.length = 0
+    },
+  }
+}
+
+type Capture = {
+  disconnect(): void
+}
+
+async function createCapture(
+  context: AudioContext,
+  source: MediaStreamAudioSourceNode,
+  consume: (samples: Float32Array) => void,
+): Promise<Capture> {
+  if (selectCaptureImplementation(context) === "audio-worklet") {
+    let workletNode: AudioWorkletNode | undefined
+    try {
+      await context.audioWorklet.addModule(voiceWorkletUrl)
+      workletNode = new AudioWorkletNode(context, "opencode-voice-capture", {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [1],
+      })
+      workletNode.port.onmessage = (event: MessageEvent<{ type?: string; samples?: ArrayBuffer }>) => {
+        if (event.data?.type !== "samples" || !(event.data.samples instanceof ArrayBuffer)) return
+        consume(new Float32Array(event.data.samples))
+      }
+      workletNode.port.start()
+      source.connect(workletNode)
+      workletNode.connect(context.destination)
+      return {
+        disconnect() {
+          workletNode?.port.close()
+          workletNode?.disconnect()
+        },
+      }
+    } catch {
+      // A browser can expose AudioWorklet but reject the module because of CSP,
+      // an unsupported module type, or an unavailable secure context.
+      workletNode?.port.close()
+      workletNode?.disconnect()
+      source.disconnect()
+    }
+  }
+
+  // ScriptProcessor is deprecated, but remains the compatibility path for
+  // older browsers and embedded webviews without AudioWorklet.
+  const processor = context.createScriptProcessor(4096, 1, 1)
+  processor.onaudioprocess = (event) => consume(new Float32Array(event.inputBuffer.getChannelData(0)))
+  source.connect(processor)
+  processor.connect(context.destination)
+  return {
+    disconnect() {
+      processor.onaudioprocess = null
+      processor.disconnect()
     },
   }
 }

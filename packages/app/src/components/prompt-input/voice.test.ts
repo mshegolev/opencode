@@ -1,5 +1,19 @@
 import { describe, expect, test } from "bun:test"
-import { VoiceError, downsample, encodeWav, mergeChunks, transcribe, TARGET_SAMPLE_RATE, type Fetcher } from "./voice"
+import {
+  VoiceError,
+  detectVoiceActivity,
+  downsample,
+  encodeWav,
+  mergeChunks,
+  selectCaptureImplementation,
+  startRecording,
+  transcribe,
+  MAX_RECORDING_SECONDS,
+  MIN_RECORDING_SECONDS,
+  TARGET_SAMPLE_RATE,
+  type Fetcher,
+  type VoiceActivityState,
+} from "./voice"
 
 function readAscii(view: DataView, offset: number, length: number) {
   let out = ""
@@ -55,6 +69,223 @@ describe("encodeWav", () => {
     const view = new DataView(await encodeWav(new Float32Array([2, -2]), TARGET_SAMPLE_RATE).arrayBuffer())
     expect(view.getInt16(44, true)).toBe(32767)
     expect(view.getInt16(46, true)).toBe(-32768)
+  })
+})
+
+describe("detectVoiceActivity", () => {
+  const quiet = new Float32Array(160)
+  const speech = new Float32Array(160).fill(0.1)
+  const initial = (): VoiceActivityState => ({ speechStarted: false, voicedMs: 0, finalized: false })
+  const options = { minSpeechMs: 20, silenceMs: 300 }
+
+  test("does not finalize silence before speech", () => {
+    const result = detectVoiceActivity(initial(), quiet, 16000, 1000, options)
+    expect(result.event).toBeUndefined()
+    expect(result.state.speechStarted).toBeFalse()
+  })
+
+  test("emits speech start after sustained voiced frames", () => {
+    const first = detectVoiceActivity(initial(), speech, 16000, 1000, options)
+    const second = detectVoiceActivity(first.state, speech, 16000, 1010, options)
+    expect(second.event).toBe("speech-started")
+    expect(second.state.speechStarted).toBeTrue()
+  })
+
+  test("emits silence once after speech", () => {
+    const started: VoiceActivityState = {
+      speechStarted: true,
+      voicedMs: 20,
+      lastVoiceAt: 1000,
+      finalized: false,
+    }
+    const waiting = detectVoiceActivity(started, quiet, 16000, 1299, options)
+    expect(waiting.event).toBeUndefined()
+    const silence = detectVoiceActivity(waiting.state, quiet, 16000, 1300, options)
+    expect(silence.event).toBe("silence")
+    expect(detectVoiceActivity(silence.state, quiet, 16000, 1600, options).event).toBeUndefined()
+  })
+})
+
+type FakeProcessor = {
+  onaudioprocess: ((event: { inputBuffer: { getChannelData(channel: number): Float32Array } }) => void) | null
+}
+
+/**
+ * Stands in for the browser audio stack, so the recorder can be driven frame by
+ * frame on a clock the test owns instead of waiting on a real microphone.
+ */
+function installFakeAudio() {
+  const original = {
+    AudioContext: globalThis.AudioContext,
+    navigator: globalThis.navigator,
+    now: Date.now,
+    setInterval: globalThis.setInterval,
+    clearInterval: globalThis.clearInterval,
+  }
+  const counts = { processorDisconnected: 0, contextClosed: 0, trackStopped: 0, intervalCleared: 0 }
+  let processor: FakeProcessor | undefined
+  let watchdog: (() => void) | undefined
+  let clock = 0
+
+  class FakeAudioContext {
+    sampleRate = 16000
+    destination = {}
+    createMediaStreamSource() {
+      return { connect() {}, disconnect() {} }
+    }
+    createScriptProcessor() {
+      const created = {
+        onaudioprocess: null,
+        connect() {},
+        disconnect() {
+          counts.processorDisconnected++
+        },
+      }
+      processor = created
+      return created
+    }
+    close() {
+      counts.contextClosed++
+      return Promise.resolve()
+    }
+  }
+
+  Object.defineProperty(globalThis, "AudioContext", { configurable: true, value: FakeAudioContext })
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: {
+      mediaDevices: {
+        getUserMedia: async () => ({ getTracks: () => [{ stop: () => counts.trackStopped++ }] }),
+      },
+    },
+  })
+  Date.now = () => clock
+  globalThis.setInterval = ((handler: () => void) => {
+    watchdog = handler
+    return 0
+  }) as unknown as typeof setInterval
+  globalThis.clearInterval = (() => {
+    counts.intervalCleared++
+  }) as unknown as typeof clearInterval
+
+  return {
+    counts,
+    /** Delivers one capture frame, as the ScriptProcessor would. */
+    feed(samples: Float32Array) {
+      processor?.onaudioprocess?.({ inputBuffer: { getChannelData: () => samples } })
+    },
+    /** Runs the duration watchdog the recorder installed. */
+    tick() {
+      watchdog?.()
+    },
+    advance(ms: number) {
+      clock += ms
+    },
+    restore() {
+      Date.now = original.now
+      globalThis.setInterval = original.setInterval
+      globalThis.clearInterval = original.clearInterval
+      Object.defineProperty(globalThis, "AudioContext", { configurable: true, value: original.AudioContext })
+      Object.defineProperty(globalThis, "navigator", { configurable: true, value: original.navigator })
+    },
+  }
+}
+
+const loud = () => new Float32Array(160).fill(0.1)
+const quiet = () => new Float32Array(160)
+
+describe("recorder capture", () => {
+  test("selects AudioWorklet only when both APIs are available", () => {
+    expect(selectCaptureImplementation({}, false)).toBe("script-processor")
+    expect(selectCaptureImplementation({ audioWorklet: { addModule: async () => {} } }, false)).toBe("script-processor")
+    expect(selectCaptureImplementation({ audioWorklet: { addModule: async () => {} } }, true)).toBe("audio-worklet")
+  })
+
+  test("refuses to record when the browser exposes no microphone API", async () => {
+    const originalNavigator = globalThis.navigator
+    Object.defineProperty(globalThis, "navigator", { configurable: true, value: {} })
+    try {
+      await expect(startRecording()).rejects.toBeInstanceOf(VoiceError)
+    } finally {
+      Object.defineProperty(globalThis, "navigator", { configurable: true, value: originalNavigator })
+    }
+  })
+
+  test("cleans up the ScriptProcessor fallback and is safe to cancel twice", async () => {
+    const audio = installFakeAudio()
+    let silenceCalls = 0
+    try {
+      const handle = await startRecording({ minSpeechMs: 20, silenceMs: 300, onSilence: () => silenceCalls++ })
+      audio.advance(1000)
+      audio.feed(loud())
+      audio.advance(10)
+      audio.feed(loud())
+      audio.advance(300)
+      audio.feed(quiet())
+      audio.advance(300)
+      audio.feed(quiet())
+      expect(silenceCalls).toBe(1)
+      await handle.cancel()
+      await handle.cancel()
+      expect(audio.counts.processorDisconnected).toBe(1)
+      expect(audio.counts.contextClosed).toBe(1)
+      expect(audio.counts.trackStopped).toBe(1)
+      expect(audio.counts.intervalCleared).toBe(1)
+    } finally {
+      audio.restore()
+    }
+  })
+
+  test("stop returns the captured audio as WAV and releases the microphone", async () => {
+    const audio = installFakeAudio()
+    try {
+      const handle = await startRecording()
+      audio.feed(loud())
+      audio.feed(loud())
+      audio.advance(1000)
+      const recorded = await handle.stop()
+      expect(recorded?.seconds).toBe(1)
+      expect(recorded?.audio.type).toBe("audio/wav")
+      // 320 captured samples at the target rate, so no resampling: header + 16-bit frames.
+      expect(recorded?.audio.size).toBe(44 + 320 * 2)
+      expect(audio.counts.processorDisconnected).toBe(1)
+      expect(audio.counts.contextClosed).toBe(1)
+      expect(audio.counts.trackStopped).toBe(1)
+      expect(audio.counts.intervalCleared).toBe(1)
+    } finally {
+      audio.restore()
+    }
+  })
+
+  test("stop discards a mis-click shorter than the minimum, still releasing the microphone", async () => {
+    const audio = installFakeAudio()
+    try {
+      const handle = await startRecording()
+      audio.feed(loud())
+      audio.advance(MIN_RECORDING_SECONDS * 1000 - 1)
+      expect(await handle.stop()).toBeUndefined()
+      expect(audio.counts.trackStopped).toBe(1)
+      expect(audio.counts.contextClosed).toBe(1)
+    } finally {
+      audio.restore()
+    }
+  })
+
+  test("announces the duration limit once, however often the watchdog runs", async () => {
+    const audio = installFakeAudio()
+    let limitCalls = 0
+    try {
+      const handle = await startRecording({ onLimit: () => limitCalls++ })
+      audio.tick()
+      expect(limitCalls).toBe(0)
+      audio.advance(MAX_RECORDING_SECONDS * 1000)
+      audio.tick()
+      audio.tick()
+      expect(limitCalls).toBe(1)
+      await handle.cancel()
+    } finally {
+      audio.restore()
+    }
   })
 })
 
