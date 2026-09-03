@@ -19,6 +19,12 @@ than downloading a gigabyte behind your back:
     .venv-voice/bin/pip install faster-whisper
     .venv-voice/bin/python script/voice-stt-dev.py
 
+The default model is `small`, chosen for turnaround rather than accuracy: it
+answers a short phrase in about 2 s on an M1 Pro where `large-v3-turbo` — the
+class the deployment runs — takes about 7 s, because CTranslate2 has no GPU path
+here. `small` does mangle proper nouns, so set `VOICE_STT_MODEL=large-v3-turbo`
+when the transcript itself is what you are checking rather than the UI around it.
+
 Audio stays in the memory of the request — it is never written to disk and never
 logged, which is the same rule the real service keeps.
 """
@@ -33,7 +39,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("VOICE_STT_DEV_PORT") or 8756)
-MODEL_NAME = os.environ.get("VOICE_STT_MODEL") or "large-v3-turbo"
+MODEL_NAME = os.environ.get("VOICE_STT_MODEL") or "small"
 DEVICE = os.environ.get("VOICE_STT_DEVICE") or "cpu"
 COMPUTE_TYPE = os.environ.get("VOICE_STT_COMPUTE") or "int8"
 # Empty means "detect", which is what the gateway does.

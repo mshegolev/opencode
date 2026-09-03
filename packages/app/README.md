@@ -91,7 +91,9 @@ OPENCODE_VOICE_STT_URL=/chat/stt bun dev:web    # terminal 2
 ```
 
 It installs nothing; if `faster_whisper` is missing it prints the two commands
-that provide it. The default model is `large-v3-turbo`, the same class the
-deployment uses, which costs about 7 s per phrase on an M1 Pro because
-CTranslate2 runs on the CPU — `VOICE_STT_MODEL=small` trades accuracy for a
-faster loop. `VOICE_STT_DEV_PORT` moves the port on both sides.
+that provide it. The default model is `small`, which answers a short phrase in
+about 2 s on an M1 Pro — CTranslate2 has no GPU path here, so the model the
+deployment actually runs takes about 7 s, long enough to make working on the UI
+tedious. `small` earns that by mangling proper nouns, so switch to
+`VOICE_STT_MODEL=large-v3-turbo` when you are checking the transcript rather than
+the composer around it. `VOICE_STT_DEV_PORT` moves the port on both sides.
