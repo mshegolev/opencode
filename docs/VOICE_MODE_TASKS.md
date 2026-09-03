@@ -10,7 +10,12 @@ and `P` covers platform/deployment work.
   driving a fake audio stack.
 - D2: requesting, listening, and finalizing states and an explicit cancel control
   are integrated; component-level coverage of draft preservation and of distinct
-  permission/authentication/network failures remains.
+  permission/authentication/network failures remains. Verified live in a browser
+  on 2026-09-04 against `script/voice-stt-dev.py`: one click records, silence
+  finalizes without a second click, and the transcript lands in the composer
+  without being submitted. That pass also raised D3 and D4.
+- D3/D4: raised by the first live use — the running state is too quiet to see,
+  and one click per utterance is too many for dictating a paragraph.
 - P1: runtime meta configuration and server-side injection are implemented with
   build-time fallback.
 - V1/V4: the typed client event parser and pure Voice Mode state machine,
@@ -45,6 +50,27 @@ and `P` covers platform/deployment work.
   - Prefer runtime config over the existing Vite build-time fallback.
   - Acceptance: the same frontend artifact can enable different paths and
     capabilities in local, stage, and production environments.
+
+- [ ] **D3 — Dictation is visible while it is running**
+  - The microphone button changing icon is too quiet a signal: pressing it must
+    show an animated indicator that recording is live, readable at a glance
+    without hunting for which icon is current.
+  - Distinguish `listening` from `finalizing` visually, since finalizing can
+    take seconds and currently looks like nothing is happening.
+  - Acceptance: a user who looks away and back can tell within a second whether
+    the composer is recording, recognizing, or idle.
+
+- [ ] **D4 — Continuous dictation until the user sends**
+  - Today one click captures one utterance: silence finalizes it and the mode
+    ends. Dictating a paragraph therefore costs one click per sentence.
+  - Add a mode that stays in dictation across pauses, appending each recognized
+    utterance to the draft, and leaves only on an explicit stop, on send, or
+    after a longer idle timeout.
+  - The choice between per-utterance and continuous belongs in settings, with
+    the idle timeout configurable and the current behavior as one of the options.
+  - Acceptance: a user can dictate several sentences with natural pauses without
+    touching the button, the draft accumulates in order, and nothing is
+    submitted until the user submits it.
 
 - [ ] **P2 — Native voice authentication**
   - Remove the accidental dependency on a separate chat-login cookie.
