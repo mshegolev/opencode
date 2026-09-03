@@ -67,7 +67,9 @@ import {
   promptLength,
 } from "./prompt-input/history"
 import { createPromptSubmit, type FollowupDraft } from "./prompt-input/submit"
-import { NO_SPEECH_SUSPECT, startRecording, sttEndpoint, transcribe, VoiceError } from "./prompt-input/voice"
+import { NO_SPEECH_SUSPECT, startRecording, transcribe, VoiceError } from "./prompt-input/voice"
+import { voiceConfig } from "./prompt-input/voice-config"
+import { VoiceModePanel } from "./prompt-input/voice-mode-panel"
 import { showToast } from "@/utils/toast"
 import { PromptPopover, type AtOption, type SlashCommand } from "./prompt-input/slash-popover"
 import { PromptContextItems } from "./prompt-input/context-items"
@@ -1089,11 +1091,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     readClipboardImage: platform.readClipboardImage,
   })
 
-  // Voice input: record, transcribe, insert the text at the cursor. The button
-  // exists only when the build was given an endpoint (see prompt-input/voice.ts),
-  // so a stock build renders exactly what it rendered before.
-  const voiceEndpoint = sttEndpoint()
-  const [voiceState, setVoiceState] = createSignal<"idle" | "recording" | "transcribing">("idle")
+  // Voice input: record, transcribe, insert the text at the cursor. Runtime
+  // deployment config takes precedence over the local build-time fallback.
+  const voiceCapabilities = voiceConfig()
+  const voice = voiceCapabilities.dictation
+  const voiceMode = voiceCapabilities.mode
+  const [voiceModeOpen, setVoiceModeOpen] = createSignal(false)
+  const [voiceStore, setVoiceStore] = createStore({
+    state: "idle" as "idle" | "requesting" | "listening" | "finalizing",
+  })
   let recording: Awaited<ReturnType<typeof startRecording>> | undefined
 
   const voiceFailed = (reason: string) => {
@@ -1108,7 +1114,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const handle = recording
     recording = undefined
     if (!handle) return
-    setVoiceState("transcribing")
+    setVoiceStore("state", "finalizing")
     try {
       const recorded = await handle.stop()
       if (!recorded) {
@@ -1118,7 +1124,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         })
         return
       }
-      const result = await transcribe(recorded.audio, voiceEndpoint)
+      if (!voice) return
+      const result = await transcribe(recorded.audio, voice.batchUrl)
       if (!result.text) {
         showToast({
           title: language.t("prompt.toast.voiceEmpty.title"),
@@ -1136,22 +1143,36 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     } catch (error) {
       voiceFailed(error instanceof VoiceError || error instanceof Error ? error.message : String(error))
     } finally {
-      setVoiceState("idle")
+      setVoiceStore("state", "idle")
     }
   }
 
   const toggleVoice = async () => {
-    if (voiceState() === "transcribing") return
-    if (voiceState() === "recording") {
+    if (voiceStore.state === "requesting" || voiceStore.state === "finalizing") return
+    if (voiceStore.state === "listening") {
       await finishRecording()
       return
     }
+    if (!voice) return
+    setVoiceStore("state", "requesting")
     try {
-      recording = await startRecording(() => void finishRecording())
-      setVoiceState("recording")
+      recording = await startRecording({
+        silenceMs: voice.silenceMs,
+        onLimit: () => void finishRecording(),
+        onSilence: () => void finishRecording(),
+      })
+      setVoiceStore("state", "listening")
     } catch (error) {
       voiceFailed(error instanceof VoiceError || error instanceof Error ? error.message : String(error))
+      setVoiceStore("state", "idle")
     }
+  }
+
+  const cancelVoice = async () => {
+    const handle = recording
+    recording = undefined
+    setVoiceStore("state", "idle")
+    await handle?.cancel()
   }
 
   onCleanup(() => {
@@ -1160,29 +1181,46 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   const voiceLabel = () =>
-    voiceState() === "recording"
-      ? language.t("prompt.action.voice.stop")
-      : voiceState() === "transcribing"
-        ? language.t("prompt.action.voice.transcribing")
-        : language.t("prompt.action.voice.start")
+    voiceStore.state === "requesting"
+      ? language.t("prompt.action.voice.requesting")
+      : voiceStore.state === "listening"
+        ? language.t("prompt.action.voice.stop")
+        : voiceStore.state === "finalizing"
+          ? language.t("prompt.action.voice.transcribing")
+          : language.t("prompt.action.voice.start")
 
   const voiceButton = () => (
-    <Show when={voiceEndpoint !== ""}>
-      <Tooltip placement="top" value={voiceLabel()}>
-        <IconButton
-          data-action="prompt-voice"
-          data-voice-state={voiceState()}
-          type="button"
-          variant="ghost"
-          class="size-8"
-          disabled={voiceState() === "transcribing"}
-          icon={voiceState() === "recording" ? "microphone-recording" : "microphone"}
-          aria-pressed={voiceState() === "recording"}
-          aria-label={voiceLabel()}
-          onClick={() => void toggleVoice()}
-        />
-      </Tooltip>
-    </Show>
+    <>
+      <Show when={voice}>
+        <Tooltip placement="top" value={voiceLabel()}>
+          <IconButton
+            data-action="prompt-voice"
+            data-voice-state={voiceStore.state}
+            type="button"
+            variant="ghost"
+            class="size-8"
+            disabled={voiceStore.state === "requesting" || voiceStore.state === "finalizing"}
+            icon={voiceStore.state === "listening" ? "microphone-recording" : "microphone"}
+            aria-pressed={voiceStore.state === "listening"}
+            aria-label={voiceLabel()}
+            onClick={() => void toggleVoice()}
+          />
+        </Tooltip>
+      </Show>
+      <Show when={voice && voiceStore.state === "listening"}>
+        <Tooltip placement="top" value={language.t("prompt.action.voice.cancel")}>
+          <IconButton
+            data-action="prompt-voice-cancel"
+            type="button"
+            variant="ghost"
+            class="size-8"
+            icon="close"
+            aria-label={language.t("prompt.action.voice.cancel")}
+            onClick={() => void cancelVoice()}
+          />
+        </Tooltip>
+      </Show>
+    </>
   )
 
   const fileAttachmentInput = () => (
@@ -1232,6 +1270,30 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onAbort: props.onAbort,
     onSubmit: props.onSubmit,
   })
+
+  const voiceModeButton = () => (
+    <Show when={voiceMode}>
+      <Tooltip placement="top" value={language.t("prompt.voiceMode.action.open")}>
+        <IconButton
+          data-action="prompt-voice-mode"
+          type="button"
+          variant="ghost"
+          class="size-8"
+          icon="prompt"
+          aria-pressed={voiceModeOpen()}
+          aria-label={language.t("prompt.voiceMode.action.open")}
+          onClick={() => setVoiceModeOpen(true)}
+        />
+      </Tooltip>
+    </Show>
+  )
+
+  const submitVoiceTranscript = (text: string) => {
+    const value = text.trim()
+    if (!value) return
+    addPart({ type: "text", content: value, start: 0, end: value.length })
+    void handleSubmit(new Event("submit"))
+  }
 
   const handleKeyDown = (event: KeyboardEvent) => {
     if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "u") {
@@ -1557,6 +1619,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         commandKeybind={command.keybind}
         t={(key) => language.t(key as Parameters<typeof language.t>[0])}
       />
+      <Show when={voiceModeOpen() && voiceMode}>
+        {(capability) => (
+          <VoiceModePanel
+            url={capability().realtimeUrl}
+            onTranscriptFinal={submitVoiceTranscript}
+            onAbort={() => {
+              void abort()
+            }}
+            onExit={() => setVoiceModeOpen(false)}
+          />
+        )}
+      </Show>
       <Switch>
         <Match when={settings.general.newLayoutDesigns()}>
           <div class="flex flex-col gap-3">
@@ -1708,6 +1782,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   </Show>
                 </div>
                 {voiceButton()}
+                {voiceModeButton()}
                 <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
                   <IconButton
                     data-action="prompt-submit"
@@ -1856,6 +1931,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
                 <div class="flex items-center gap-1 pointer-events-auto">
                   {voiceButton()}
+                  {voiceModeButton()}
                   <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
                     <IconButton
                       data-action="prompt-submit"
