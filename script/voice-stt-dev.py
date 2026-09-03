@@ -8,7 +8,7 @@ that something: it speaks the same contract as the real endpoint and recognizes
 speech with faster-whisper on this machine. No key, no gateway, no network.
 
     python3 script/voice-stt-dev.py
-    VITE_OPENCODE_VOICE_STT_URL=/chat/stt bun dev:web
+    OPENCODE_VOICE_STT_URL=/chat/stt bun dev:web
 
 The Vite dev server proxies `/chat/stt` here (packages/app/vite.config.ts).
 

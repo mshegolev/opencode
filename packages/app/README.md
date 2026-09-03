@@ -56,12 +56,16 @@ to a speech-to-text endpoint and inserts the recognized text at the cursor. It i
 off by default and appears only when the build is given an endpoint:
 
 ```bash
-VITE_OPENCODE_VOICE_STT_URL=/stt bun run build
+OPENCODE_VOICE_STT_URL=/stt bun run build
 ```
 
-A deployment can configure the same artifact at runtime instead, which is what
-the server does when `OPENCODE_VOICE_STT_URL` is set for it; the build-time
-variable above is the local fallback.
+The variable is unprefixed because `vite.js` maps it into
+`import.meta.env.VITE_OPENCODE_VOICE_STT_URL` itself; setting the prefixed name
+does nothing, since that `define` overrides whatever Vite would have loaded.
+
+A deployment can configure the same artifact at runtime instead — the server
+reads the same variable name and writes the answer into the page — and runtime
+config wins over this build-time fallback.
 
 The endpoint receives a `POST` with a raw `audio/wav` body (16 kHz, mono, 16-bit,
 assembled in the browser rather than by `MediaRecorder`, whose container differs
@@ -82,8 +86,8 @@ contract from this machine using faster-whisper, and the dev server proxies
 `/chat/stt` to it:
 
 ```bash
-python3 script/voice-stt-dev.py                    # terminal 1
-VITE_OPENCODE_VOICE_STT_URL=/chat/stt bun dev:web  # terminal 2
+python3 script/voice-stt-dev.py                # terminal 1
+OPENCODE_VOICE_STT_URL=/chat/stt bun dev:web    # terminal 2
 ```
 
 It installs nothing; if `faster_whisper` is missing it prints the two commands

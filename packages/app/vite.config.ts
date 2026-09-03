@@ -29,7 +29,7 @@ export default defineConfig({
     // src/components/prompt-input/voice-config.ts), which a dev server has no
     // reason to carry. Forward it to the local stand-in instead:
     // `python3 script/voice-stt-dev.py`. Harmless when nothing is listening —
-    // without VITE_OPENCODE_VOICE_STT_URL the microphone button never renders,
+    // without OPENCODE_VOICE_STT_URL the microphone button never renders,
     // so nothing calls this path.
     proxy: {
       "/chat/stt": {
