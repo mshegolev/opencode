@@ -271,6 +271,116 @@ describe("recorder capture", () => {
     }
   })
 
+  test("flush cuts a segment and keeps the microphone open", async () => {
+    const audio = installFakeAudio()
+    let silenceCalls = 0
+    try {
+      const handle = await startRecording({ minSpeechMs: 20, silenceMs: 300, onSilence: () => silenceCalls++ })
+      audio.advance(1000)
+      audio.feed(loud())
+      audio.advance(10)
+      audio.feed(loud())
+      audio.advance(300)
+      audio.feed(quiet())
+      expect(silenceCalls).toBe(1)
+
+      const first = handle.flush()
+      expect(first?.audio.size).toBe(44 + 480 * 2)
+      // Still recording: nothing was released by cutting a segment.
+      expect(audio.counts.trackStopped).toBe(0)
+      expect(audio.counts.contextClosed).toBe(0)
+
+      // The silence rule starts over, so the next pause is reported too.
+      audio.advance(10)
+      audio.feed(loud())
+      audio.advance(10)
+      audio.feed(loud())
+      audio.advance(300)
+      audio.feed(quiet())
+      expect(silenceCalls).toBe(2)
+
+      const second = handle.flush()
+      // The second segment carries only what came after the first cut.
+      expect(second?.audio.size).toBe(44 + 480 * 2)
+      await handle.cancel()
+      expect(audio.counts.trackStopped).toBe(1)
+    } finally {
+      audio.restore()
+    }
+  })
+
+  test("flush returns nothing once the recorder is released", async () => {
+    const audio = installFakeAudio()
+    try {
+      const handle = await startRecording()
+      audio.feed(loud())
+      audio.advance(1000)
+      await handle.cancel()
+      expect(handle.flush()).toBeUndefined()
+    } finally {
+      audio.restore()
+    }
+  })
+
+  test("announces going idle once, when no speech follows for the idle window", async () => {
+    const audio = installFakeAudio()
+    let idleCalls = 0
+    try {
+      const handle = await startRecording({ minSpeechMs: 20, silenceMs: 300, idleMs: 2000, onIdle: () => idleCalls++ })
+      audio.feed(loud())
+      audio.advance(10)
+      audio.feed(loud())
+      audio.advance(1000)
+      audio.tick()
+      expect(idleCalls).toBe(0)
+      audio.advance(1500)
+      audio.tick()
+      audio.tick()
+      expect(idleCalls).toBe(1)
+      await handle.cancel()
+    } finally {
+      audio.restore()
+    }
+  })
+
+  test("speech keeps the idle window from expiring", async () => {
+    const audio = installFakeAudio()
+    let idleCalls = 0
+    try {
+      const handle = await startRecording({ minSpeechMs: 20, silenceMs: 300, idleMs: 1000, onIdle: () => idleCalls++ })
+      for (let i = 0; i < 5; i++) {
+        audio.advance(800)
+        audio.feed(loud())
+        audio.tick()
+      }
+      expect(idleCalls).toBe(0)
+      await handle.cancel()
+    } finally {
+      audio.restore()
+    }
+  })
+
+  test("the duration limit measures the current segment, not the whole session", async () => {
+    const audio = installFakeAudio()
+    let limitCalls = 0
+    try {
+      const handle = await startRecording({ onLimit: () => limitCalls++ })
+      audio.feed(loud())
+      audio.advance(MAX_RECORDING_SECONDS * 1000 - 100)
+      handle.flush()
+      audio.tick()
+      // The clock passed the ceiling, but this segment did not.
+      expect(limitCalls).toBe(0)
+      audio.feed(loud())
+      audio.advance(MAX_RECORDING_SECONDS * 1000)
+      audio.tick()
+      expect(limitCalls).toBe(1)
+      await handle.cancel()
+    } finally {
+      audio.restore()
+    }
+  })
+
   test("announces the duration limit once, however often the watchdog runs", async () => {
     const audio = installFakeAudio()
     let limitCalls = 0

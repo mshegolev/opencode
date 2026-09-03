@@ -47,6 +47,7 @@ describe("VoiceModeClient voice.v1 contract", () => {
         recorderOptions = options
         return {
           stop: async () => ({ audio: encodeWav(new Float32Array([0.1, -0.1]), 16000), seconds: 1 }),
+          flush: () => undefined,
           cancel: async () => {},
         }
       },
@@ -83,6 +84,7 @@ describe("VoiceModeClient voice.v1 contract", () => {
       socketFactory: () => socket,
       recordingFactory: async () => ({
         stop: async () => ({ audio: encodeWav(new Float32Array([0.2]), 16000), seconds: 1 }),
+        flush: () => undefined,
         cancel: async () => {},
       }),
       reconnect: false,

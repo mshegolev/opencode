@@ -153,6 +153,13 @@ export async function transcribe(audio: Blob, endpoint: string, fetcher: Fetcher
 type RecorderHandle = {
   /** Stops capture and returns the recording as WAV, or undefined if too short. */
   stop(): Promise<{ audio: Blob; seconds: number } | undefined>
+  /**
+   * Cuts the audio captured so far and keeps the microphone open, so continuous
+   * dictation can send one phrase while the next is already being spoken. The
+   * minimum length does not apply here: a short segment reached this point
+   * because speech was heard, which a mis-click never does.
+   */
+  flush(): { audio: Blob; seconds: number } | undefined
   /** Drops the recording and releases the microphone. */
   cancel(): Promise<void>
 }
@@ -170,9 +177,12 @@ export type RecorderOptions = {
   silenceMs?: number
   speechThreshold?: number
   minSpeechMs?: number
+  /** How long without any voice ends continuous dictation. Unset never ends it. */
+  idleMs?: number
   onLimit?: () => void
   onSpeechStart?: () => void
   onSilence?: () => void
+  onIdle?: () => void
 }
 
 export type CaptureImplementation = "audio-worklet" | "script-processor"
@@ -248,12 +258,23 @@ export async function startRecording(options: RecorderOptions | (() => void) = {
   const config = typeof options === "function" ? { onLimit: options } : options
   let activity: VoiceActivityState = { speechStarted: false, voicedMs: 0, finalized: false }
   let released = false
+  // The buffer and both watchdogs are per segment, not per session: continuous
+  // dictation cuts segments without reopening the microphone, and a ceiling
+  // measured from the first press would cut off a long dictation mid-sentence.
+  let segmentStartedAt = startedAt
+  let lastVoiceAt = startedAt
+  let limitNotified = false
+  let idleNotified = false
 
   const consume = (samples: Float32Array) => {
     if (released) return
     chunks.push(samples)
     const next = detectVoiceActivity(activity, samples, sampleRate, Date.now(), config)
     activity = next.state
+    if (activity.lastVoiceAt !== undefined && activity.lastVoiceAt > lastVoiceAt) {
+      lastVoiceAt = activity.lastVoiceAt
+      idleNotified = false
+    }
     if (next.event === "speech-started") config.onSpeechStart?.()
     if (next.event === "silence") config.onSilence?.()
   }
@@ -270,21 +291,40 @@ export async function startRecording(options: RecorderOptions | (() => void) = {
     await context.close()
   }
 
-  let limitNotified = false
   const limitTimer = setInterval(() => {
-    if (!limitNotified && Date.now() - startedAt >= MAX_RECORDING_SECONDS * 1000) {
+    const now = Date.now()
+    if (!limitNotified && now - segmentStartedAt >= MAX_RECORDING_SECONDS * 1000) {
       limitNotified = true
       config.onLimit?.()
     }
+    if (!idleNotified && config.idleMs !== undefined && now - lastVoiceAt >= config.idleMs) {
+      idleNotified = true
+      config.onIdle?.()
+    }
   }, 250)
+
+  const cut = () => {
+    const now = Date.now()
+    const seconds = (now - segmentStartedAt) / 1000
+    const samples = mergeChunks(chunks)
+    chunks.length = 0
+    segmentStartedAt = now
+    activity = { speechStarted: false, voicedMs: 0, finalized: false }
+    limitNotified = false
+    return { samples, seconds }
+  }
 
   return {
     async stop() {
-      const seconds = (Date.now() - startedAt) / 1000
+      const { samples, seconds } = cut()
       await release()
-      const samples = mergeChunks(chunks)
-      chunks.length = 0
       if (seconds < MIN_RECORDING_SECONDS || samples.length === 0) return undefined
+      return { audio: encodeWav(downsample(samples, sampleRate, TARGET_SAMPLE_RATE), TARGET_SAMPLE_RATE), seconds }
+    },
+    flush() {
+      if (released) return undefined
+      const { samples, seconds } = cut()
+      if (samples.length === 0) return undefined
       return { audio: encodeWav(downsample(samples, sampleRate, TARGET_SAMPLE_RATE), TARGET_SAMPLE_RATE), seconds }
     },
     async cancel() {
