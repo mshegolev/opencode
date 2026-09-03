@@ -1240,7 +1240,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             id: "prompt.voice.toggle",
             title: language.t("command.prompt.voice.toggle"),
             category: language.t("command.category.session"),
-            keybind: "mod+shift+u",
+            // Deliberately not a letter: shortcuts are matched on `event.key`,
+            // which under a Cyrillic layout reports "г" for the U key — and the
+            // people dictating Russian are on that layout while they do it.
+            // Space reports " " on every layout.
+            keybind: "mod+shift+space",
             disabled: voiceStore.state === "requesting" || voiceStore.state === "finalizing",
             onSelect: () => void toggleVoice(),
           },
