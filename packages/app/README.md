@@ -86,9 +86,18 @@ contract from this machine using faster-whisper, and the dev server proxies
 `/chat/stt` to it:
 
 ```bash
-python3 script/voice-stt-dev.py                # terminal 1
-OPENCODE_VOICE_STT_URL=/chat/stt bun dev:web    # terminal 2
+python3 script/voice-stt-dev.py                                        # terminal 1
+bun run --cwd packages/opencode --conditions=browser src/index.ts \
+  serve --port 4096                                                    # terminal 2
+OPENCODE_VOICE_STT_URL=/chat/stt bun dev:web                           # terminal 3
 ```
+
+Then open <http://localhost:3000/>. All three are needed and each answers a
+different address: in dev the page fetches the API from `localhost:4096`
+(`src/entry.tsx`), while the microphone posts to a path relative to the *page*,
+which is why the stand-in hangs off the dev server rather than the backend.
+Without the server on 4096 the composer never renders and the microphone has
+nowhere to appear — an empty prompt area is that, not a voice problem.
 
 It installs nothing; if `faster_whisper` is missing it prints the two commands
 that provide it. The default model is `small`, which answers a short phrase in
