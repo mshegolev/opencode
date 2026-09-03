@@ -114,9 +114,10 @@ type FakeProcessor = {
  * Stands in for the browser audio stack, so the recorder can be driven frame by
  * frame on a clock the test owns instead of waiting on a real microphone.
  */
-function installFakeAudio() {
+function installFakeAudio({ sampleRate = 16000 } = {}) {
   const original = {
     AudioContext: globalThis.AudioContext,
+    secureContext: Object.getOwnPropertyDescriptor(globalThis, "isSecureContext"),
     navigator: globalThis.navigator,
     now: Date.now,
     setInterval: globalThis.setInterval,
@@ -128,7 +129,7 @@ function installFakeAudio() {
   let clock = 0
 
   class FakeAudioContext {
-    sampleRate = 16000
+    sampleRate = sampleRate
     destination = {}
     createMediaStreamSource() {
       return { connect() {}, disconnect() {} }
@@ -150,6 +151,7 @@ function installFakeAudio() {
     }
   }
 
+  Object.defineProperty(globalThis, "isSecureContext", { configurable: true, value: true })
   Object.defineProperty(globalThis, "AudioContext", { configurable: true, value: FakeAudioContext })
   Object.defineProperty(globalThis, "navigator", {
     configurable: true,
@@ -182,6 +184,8 @@ function installFakeAudio() {
       clock += ms
     },
     restore() {
+      if (original.secureContext) Object.defineProperty(globalThis, "isSecureContext", original.secureContext)
+      else Reflect.deleteProperty(globalThis, "isSecureContext")
       Date.now = original.now
       globalThis.setInterval = original.setInterval
       globalThis.clearInterval = original.clearInterval
@@ -199,6 +203,49 @@ describe("recorder capture", () => {
     expect(selectCaptureImplementation({}, false)).toBe("script-processor")
     expect(selectCaptureImplementation({ audioWorklet: { addModule: async () => {} } }, false)).toBe("script-processor")
     expect(selectCaptureImplementation({ audioWorklet: { addModule: async () => {} } }, true)).toBe("audio-worklet")
+  })
+
+  test("names an insecure page as the reason, not a missing microphone API", async () => {
+    const originalSecure = Object.getOwnPropertyDescriptor(globalThis, "isSecureContext")
+    const originalNavigator = globalThis.navigator
+    Object.defineProperty(globalThis, "isSecureContext", { configurable: true, value: false })
+    // A microphone API is present: only the origin disqualifies this page.
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: { mediaDevices: { getUserMedia: async () => ({ getTracks: () => [] }) } },
+    })
+    try {
+      const error = await startRecording().catch((reason: unknown) => reason)
+      expect(error).toBeInstanceOf(VoiceError)
+      expect((error as VoiceError).message).toContain("https")
+    } finally {
+      Object.defineProperty(globalThis, "navigator", { configurable: true, value: originalNavigator })
+      if (originalSecure) Object.defineProperty(globalThis, "isSecureContext", originalSecure)
+      else Reflect.deleteProperty(globalThis, "isSecureContext")
+    }
+  })
+
+  test("resamples a 48 kHz capture, the rate Windows and Chrome usually pick", async () => {
+    const audio = installFakeAudio({ sampleRate: 48000 })
+    let silenceCalls = 0
+    try {
+      // 480 samples is 10 ms at 48 kHz, the same frame duration as 160 at 16 kHz,
+      // so the voice-activity rules must land on the same decisions.
+      const frame = (fill: number) => new Float32Array(480).fill(fill)
+      const handle = await startRecording({ minSpeechMs: 20, silenceMs: 300, onSilence: () => silenceCalls++ })
+      audio.feed(frame(0.1))
+      audio.advance(10)
+      audio.feed(frame(0.1))
+      audio.advance(300)
+      audio.feed(frame(0))
+      expect(silenceCalls).toBe(1)
+      audio.advance(700)
+      const recorded = await handle.stop()
+      // 1440 captured samples at 48 kHz become 480 at the 16 kHz target.
+      expect(recorded?.audio.size).toBe(44 + 480 * 2)
+    } finally {
+      audio.restore()
+    }
   })
 
   test("refuses to record when the browser exposes no microphone API", async () => {

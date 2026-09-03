@@ -237,6 +237,12 @@ function rootMeanSquare(samples: Float32Array) {
  * denied permission and an absent device are different problems for the user.
  */
 export async function startRecording(options: RecorderOptions | (() => void) = {}): Promise<RecorderHandle> {
+  // Checked before the API itself: a page served over plain http from a LAN
+  // address has no `mediaDevices` at all, and reporting that as a missing
+  // browser feature sends the user looking in the wrong place.
+  if (globalThis.isSecureContext === false) {
+    throw new VoiceError("the page must be served over https (or localhost) for the microphone to work", 0)
+  }
   if (!navigator.mediaDevices?.getUserMedia) {
     throw new VoiceError("this browser exposes no microphone API", 0)
   }
