@@ -31,10 +31,14 @@ What remains, in the order it should be done.
     welded together. The unit tests could not have caught it — they stop at the
     recorder, and this lives in the composer.
 
-- [ ] **A2 — Speech detection must survive an unfamiliar microphone (D5)**
-  - A fixed RMS constant chosen against one microphone. Fails silently in both
-    directions; the button looks dead while the microphone is open.
-  - The one thing blocking handing the branch to someone else.
+- [x] **A2 — Speech detection must survive an unfamiliar microphone (D5)** —
+      done 2026-09-04
+  - The threshold follows the room: seeded from the first frame, moved by frames
+    that are not speech, bounded at both ends.
+  - The ring now separates "hearing you" from "open", so a threshold left wrong
+    is visible instead of looking like a dead button.
+  - Proved in a browser on a recording attenuated to 0.006 RMS, well under the
+    0.015 constant it replaced; the opposite failure is covered by unit tests.
 
 - [ ] **A3 — Composer test coverage (D2)**
   - Draft preservation and distinct permission/authentication/network failures

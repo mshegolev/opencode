@@ -84,7 +84,7 @@ and `P` covers platform/deployment work.
     touching the button, the draft accumulates in order, and nothing is
     submitted until the user submits it.
 
-- [ ] **D5 — Speech detection must survive an unfamiliar microphone**
+- [x] **D5 — Speech detection must survive an unfamiliar microphone**
   - The speech threshold is a fixed RMS constant (`DEFAULT_SPEECH_THRESHOLD`),
     chosen against one microphone on one machine. Gain varies widely across
     Windows laptops and headsets.
