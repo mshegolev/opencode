@@ -1,8 +1,13 @@
 import type { ParentProps } from "solid-js"
 
 /**
- * Deliberately NOT `Layout`. The operator shell mounts inside the base providers only —
- * no terminals, models, permissions or prompt. Task 10 tests that this stays true.
+ * Deliberately NOT `Layout`. Placement outside `<Route path="/:dir">` in `app.tsx` does not by
+ * itself keep the developer chrome out — `Router`'s `root` (`RouterRoot`) wraps every route
+ * regardless of nesting. What actually keeps it out is `RouterRoot` checking
+ * `isOperatorPath(location.pathname)` (`./routes`) and skipping `AppShellProviders` — the
+ * titlebar, project sidebar, and the terminals/models/permissions/prompt providers it nests —
+ * for operator paths. This component only renders inside that bypass. Task 10 tests that this
+ * stays true.
  */
 export function OperatorShell(props: ParentProps) {
   return (

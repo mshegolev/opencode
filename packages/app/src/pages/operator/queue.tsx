@@ -45,7 +45,7 @@ export default function Queue() {
           <div class="flex h-full flex-col">
             <QueueTabs scope={scope()} counts={page().counts} onSelect={(next) => setParams({ scope: next })} />
             <Show when={serverNow() !== null && ingestStale(page(), serverNow()!)}>
-              <p class="border-b border-border-warning-base bg-background-strong px-3 py-1.5 text-xs text-icon-warning-base">
+              <p role="status" class="border-b border-border-warning-base bg-background-strong px-3 py-1.5 text-xs text-icon-warning-base">
                 Данные могли устареть: события из ITSM не приходили дольше пяти минут.
               </p>
             </Show>
