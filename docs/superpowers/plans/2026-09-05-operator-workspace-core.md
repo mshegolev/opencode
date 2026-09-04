@@ -456,12 +456,18 @@ export function slaClockView(input: ClockInput): ClockView {
   }
 
   const stale = ageMs > staleAfter
-  const elapsed = stale ? 0 : ageMs
-  const left = (snapshot.remainingMs ?? 0) - elapsed
+  const remaining = snapshot.remainingMs ?? 0
+  const projected = remaining - ageMs
 
-  if (left <= 0) {
-    return { display: `−${format(-left)}`, caption: "нарушен", tone: "breached", stale, ageMs }
+  // Breach is decided BEFORE the stale freeze. A deadline already in the past is known to
+  // have passed however old the snapshot is, and freezing there would show time that has
+  // certainly elapsed — the one thing this module exists to avoid.
+  if (projected <= 0) {
+    return { display: `−${format(-projected)}`, caption: "нарушен", tone: "breached", stale, ageMs }
   }
+
+  // Still ahead of the deadline: a stale snapshot stops interpolating and shows its age.
+  const left = stale ? remaining : projected
 
   return {
     display: format(left),
@@ -1033,6 +1039,7 @@ git commit -m "feat(operator): mount the queue at /queue, outside the developer 
 - Create: `packages/app/src/pages/operator/triage-fields.tsx`
 - Create: `packages/app/src/pages/operator/triage-fields.stories.tsx`
 - Create: `packages/app/src/pages/operator/incident.tsx`
+- Modify: `packages/app/src/app.tsx` — register `/queue/:number`
 
 **Interfaces:**
 - Consumes: `IncidentDetail`, `TriageFieldSet` (Task 1); `slaClockView` (Task 2); `createTicker` (Task 3); `readIncident`, `serverOffsetMs` (Task 6); `OperatorShell` (Task 7).
@@ -1187,14 +1194,28 @@ export default function Incident() {
 }
 ```
 
-- [ ] **Step 4: Verify it runs**
+- [ ] **Step 4: Register the incident route**
+
+In `packages/app/src/app.tsx`, add the lazy import beside `QueueRoute`:
+
+```tsx
+const IncidentRoute = lazy(() => import("@/pages/operator/incident"))
+```
+
+And add the route immediately after `<Route path="/queue" component={QueueRoute} />`:
+
+```tsx
+<Route path="/queue/:number" component={IncidentRoute} />
+```
+
+- [ ] **Step 5: Verify it runs**
 
 Run from `packages/app`: `bun run dev`, open `/queue`, click `INC0048812`. Expect the structured fields including "Что не проверено" and the confidence note, a large countdown in the header, and the ITSM link in the footer. Click `INC0048764` and expect "Разбора нет: разбор не начат."
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add packages/app/src/pages/operator/triage-fields.tsx packages/app/src/pages/operator/triage-fields.stories.tsx packages/app/src/pages/operator/incident.tsx
+git add packages/app/src/pages/operator/triage-fields.tsx packages/app/src/pages/operator/triage-fields.stories.tsx packages/app/src/pages/operator/incident.tsx packages/app/src/app.tsx
 git commit -m "feat(operator): show the analysis as fields a person can check"
 ```
 
