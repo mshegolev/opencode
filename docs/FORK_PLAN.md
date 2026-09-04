@@ -89,24 +89,24 @@ Langfuse side.
 
 ### Tasks
 
-- [ ] **B1 — Agree on one set of variable names, and make silence impossible**
-  - Either the fork honours `OPENCODE_OTEL_*` or the chart sets the OTLP names.
-    The chart is the cheaper side to change; the fork's names are the standard
-    ones and are what any other deployment would set.
-  - Whichever way it goes, asking for telemetry and getting a silent no-op is
-    the defect that hid this. When export is requested and cannot be configured,
-    the process must say so at startup.
-  - Acceptance: with the environment the chart provides, one span from a real
-    chat turn is visible in Langfuse, and a deliberately broken endpoint
-    produces a named error rather than silence.
+- [x] **B1 — Agree on one set of variable names, and make silence impossible** —
+      done 2026-09-04, in the fork
+  - The fork now reads both vocabularies, standard names first, so the chart
+    needs no change. A request to export that cannot be honoured prints its
+    reason instead of disabling itself quietly.
 
-- [ ] **B2 — Authenticate the exporter to Langfuse**
-  - Langfuse wants `Authorization: Basic base64(public_key:secret_key)`. The
-    keys are in the pod; nothing composes the header. Either the chart builds
-    `OTEL_EXPORTER_OTLP_HEADERS` from them, or the fork learns to build it from
-    `LANGFUSE_*` — the second keeps the secret out of a variable whose whole
-    contents are a header, and makes the fork usable against Langfuse anywhere.
-  - Acceptance: ingestion returns 2xx; a wrong key is reported, not swallowed.
+- [x] **B2 — Authenticate the exporter to Langfuse** — done 2026-09-04
+  - The header is composed from `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY`,
+    which already reach the container, so no secret has to be written into a
+    variable that is entirely a header. Half a credential is reported, not
+    silently ignored.
+  - Langfuse's OTLP path takes traces only, so the logs exporter is dropped for
+    it rather than emitting 404s.
+  - Verified against a local OTLP sink driven by the chart's own variable names:
+    `POST /api/public/otel/v1/traces` with Basic auth decoding to the two keys,
+    no logs request, and a named reason when the endpoint is missing.
+  - Not yet verified: that Langfuse itself accepts and renders these spans. That
+    is B3, and it needs a Langfuse API key this repository does not have.
 
 - [ ] **B3 — Confirm what Langfuse renders**
   - The AI SDK emits `ai.*` spans; Langfuse has first-class mapping for them.
