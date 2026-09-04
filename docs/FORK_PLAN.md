@@ -18,12 +18,18 @@ on 2026-09-04.
 
 What remains, in the order it should be done.
 
-- [ ] **A1 — Verify continuous dictation in a browser (was D3/D4)**
-  - The recorder's segment cutting has unit coverage; the loop it enables —
-    pause cuts a phrase, the phrase is recognized and appended, capture
-    continues — has never run against real pauses.
-  - Do this before A2: A2 changes the threshold that decides where a pause is,
-    and verifying a feature with the same change that alters it proves nothing.
+- [x] **A1 — Verify continuous dictation in a browser (was D3/D4)** — done
+      2026-09-04, headless Chromium fed a recording of two phrases separated by a
+      two-second pause (`--use-file-for-fake-audio-capture`), recognized by
+      stage.
+  - Confirmed: the button renders and reaches `listening`; the cancel control
+    appears only while recording; the pulsing ring is drawn; the first phrase is
+    inserted while the state is still `listening`, so the microphone does not
+    close after one phrase; the second is appended in order; nothing is
+    submitted.
+  - Found one defect, since fixed: phrases were inserted with no separator and
+    welded together. The unit tests could not have caught it — they stop at the
+    recorder, and this lives in the composer.
 
 - [ ] **A2 — Speech detection must survive an unfamiliar microphone (D5)**
   - A fixed RMS constant chosen against one microphone. Fails silently in both

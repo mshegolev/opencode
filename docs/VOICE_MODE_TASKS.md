@@ -16,8 +16,10 @@ and `P` covers platform/deployment work.
   without being submitted. That pass also raised D3 and D4.
 - D3/D4: raised by the first live use — the running state is too quiet to see,
   and one click per utterance is too many for dictating a paragraph. Both are
-  implemented; the continuous path has unit coverage of the recorder but has not
-  been exercised against real pauses in a browser.
+  implemented and verified in a browser on 2026-09-04 by feeding Chromium a
+  recording of two phrases with a pause between them: the microphone stays open
+  across the pause, phrases accumulate in order, and nothing is submitted. That
+  run found and fixed insertion with no separator between phrases.
 - D5: raised by the target audience including Windows Chrome. Two cross-platform
   defects found by reading rather than running were fixed at once — an insecure
   origin was reported as a browser without a microphone API, and the dictation
