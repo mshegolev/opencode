@@ -13,7 +13,11 @@ export function OperatorShell(props: ParentProps) {
   return (
     <div class="flex h-full flex-col bg-background-base text-text-base">
       <header class="flex items-baseline gap-3 border-b border-border-base px-4 py-3">
-        <h1 class="text-sm font-semibold">Инциденты</h1>
+        {/* Size and weight sit on the span: base.css resets them on h1–h6 outside Tailwind's
+            layers, where an unlayered rule beats a layered utility. */}
+        <h1>
+          <span class="text-sm font-semibold text-text-strong">Инциденты</span>
+        </h1>
         <span class="text-xs text-text-weak">разбор и очередь</span>
       </header>
       <div class="min-h-0 flex-1">{props.children}</div>

@@ -21,3 +21,13 @@ export async function readQueue(scope: QueueScope): Promise<QueuePage> {
 export async function readIncident(number: string): Promise<IncidentDetail> {
   return fixtureIncidentDetail(number, Date.now())
 }
+
+/**
+ * Seam. Where the operator goes to act, since this surface never writes. Plan 2 replaces the
+ * body with the deployment's configured ITSM base URL; until then the host is a deliberately
+ * reserved, non-resolving placeholder, named here rather than inlined into the detail view so
+ * there is one place to change and one place to look.
+ */
+export function itsmIncidentUrl(number: string): string {
+  return `https://itsm.example/incident/${number}`
+}

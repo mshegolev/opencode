@@ -1,4 +1,4 @@
-import { createSignal, Show } from "solid-js"
+import { Show } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { useQuery } from "@tanstack/solid-query"
 import { Link } from "@/components/link"
@@ -6,44 +6,51 @@ import { OperatorShell } from "./shell"
 import { TriageFields } from "./triage-fields"
 import { TriageTimeline } from "./triage-timeline"
 import { fixtureTranscript } from "./fixtures"
-import { readIncident, serverOffsetMs } from "./queue-data"
+import { LoadFailedNotice, LoadingNotice, SnapshotBanner } from "./notices"
+import { itsmIncidentUrl, readIncident } from "./queue-data"
+import { createServerClock } from "./server-clock"
 import { slaClockView } from "./sla-clock"
-import { createTicker } from "./ticker"
 import { triageLabel } from "./queue-row"
 
 export default function Incident() {
   const params = useParams<{ number: string }>()
-  const tick = createTicker()
-  const [offset, setOffset] = createSignal<number | null>(null)
+  const serverClock = createServerClock()
 
   const query = useQuery(() => ({
     queryKey: ["operator", "incident", params.number],
     queryFn: async () => {
       const detail = await readIncident(params.number)
-      setOffset(serverOffsetMs(detail.serverTime, Date.now()))
+      serverClock.setFromServerTime(detail.serverTime)
       return detail
     },
   }))
-
-  const serverNow = () => {
-    tick()
-    const o = offset()
-    return o === null ? null : Date.now() + o
-  }
 
   return (
     <OperatorShell>
       <Show
         when={query.data}
-        fallback={<p class="p-4 text-sm text-text-weak">{query.isError ? "Инцидент не загрузился" : "Загружаю…"}</p>}
+        fallback={
+          query.isError ? <LoadFailedNotice>Инцидент не загрузился</LoadFailedNotice> : <LoadingNotice>Загружаю…</LoadingNotice>
+        }
       >
         {(detail) => {
-          const clock = () => slaClockView({ snapshot: detail().row.sla, serverNowMs: serverNow() })
+          const clock = () => slaClockView({ snapshot: detail().row.sla, serverNowMs: serverClock.serverNow() })
           return (
             <div class="flex h-full flex-col">
               <div class="flex items-start gap-4 border-b border-border-base px-4 py-3">
                 <div class="min-w-0 flex-1">
-                  <h2 class="text-base font-semibold">{detail().row.description}</h2>
+                  {/*
+                    Typography rides on a span, not on the heading. `packages/ui`'s base.css sets
+                    `h1–h6 { font-size: inherit; font-weight: inherit }` outside Tailwind's layers,
+                    and unlayered rules beat layered utilities — so a size or weight utility on the
+                    heading itself silently loses. `text-base` is worse than useless here: this repo
+                    declares BOTH `--text-base` (14px) and `--color-base`, and Tailwind resolves the
+                    ambiguity to the colour, so it was painting the incident's title in
+                    `rgba(0,0,0,0.034)` — very nearly invisible on a light background.
+                  */}
+                  <h2>
+                    <span class="text-[14px] font-semibold text-text-strong">{detail().row.description}</span>
+                  </h2>
                   <div class="mt-0.5 flex gap-2.5 text-xs text-text-weak">
                     <span class="font-mono">{detail().row.number}</span>
                     <span>P{detail().row.priority}</span>
@@ -57,12 +64,7 @@ export default function Incident() {
                 </div>
               </div>
               <Show when={detail().fromSnapshot}>
-                <p
-                  role="status"
-                  class="border-b border-border-warning-base bg-background-strong px-4 py-1.5 text-xs text-icon-warning-base"
-                >
-                  Дочитать не удалось — показан снимок.
-                </p>
+                <SnapshotBanner capturedAt={detail().row.sla.capturedAt} />
               </Show>
               <div class="min-h-0 flex-1 overflow-y-auto p-4">
                 <Show
@@ -88,7 +90,7 @@ export default function Incident() {
                 </Show>
               </div>
               <div class="border-t border-border-base bg-background-strong px-4 py-2 text-xs text-text-weak">
-                <Link href={`https://itsm.example/incident/${detail().row.number}`}>Открыть тикет в ITSM</Link>
+                <Link href={itsmIncidentUrl(detail().row.number)}>Открыть тикет в ITSM</Link>
               </div>
             </div>
           )
