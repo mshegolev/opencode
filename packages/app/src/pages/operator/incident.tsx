@@ -4,6 +4,8 @@ import { useQuery } from "@tanstack/solid-query"
 import { Link } from "@/components/link"
 import { OperatorShell } from "./shell"
 import { TriageFields } from "./triage-fields"
+import { TriageTimeline } from "./triage-timeline"
+import { fixtureTranscript } from "./fixtures"
 import { readIncident, serverOffsetMs } from "./queue-data"
 import { slaClockView } from "./sla-clock"
 import { createTicker } from "./ticker"
@@ -68,6 +70,21 @@ export default function Incident() {
                   fallback={<p class="text-sm text-text-weak">Разбора нет: {triageLabel(detail().row.triage)}.</p>}
                 >
                   {(fields) => <TriageFields fields={fields()} />}
+                </Show>
+                <Show when={detail().row.sessionId}>
+                  {(sessionId) => {
+                    const transcript = fixtureTranscript(sessionId())
+                    return (
+                      <details class="mt-4 rounded border border-border-base">
+                        <summary class="cursor-pointer px-3 py-2 text-xs uppercase tracking-wide text-text-weak">
+                          Лента разбора — {transcript.messages.length} сообщений
+                        </summary>
+                        <div class="border-t border-border-base p-3">
+                          <TriageTimeline sessionId={sessionId()} messages={transcript.messages} parts={transcript.parts} />
+                        </div>
+                      </details>
+                    )
+                  }}
                 </Show>
               </div>
               <div class="border-t border-border-base bg-background-strong px-4 py-2 text-xs text-text-weak">

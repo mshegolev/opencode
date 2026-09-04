@@ -1,3 +1,4 @@
+import type { Message, Part } from "@opencode-ai/sdk/v2"
 import type { IncidentDetail, IncidentRow, QueuePage, QueueScope } from "./types"
 
 const iso = (ms: number) => new Date(ms).toISOString()
@@ -133,4 +134,60 @@ export function fixtureIncidentDetail(number: string, nowMs: number): IncidentDe
     fromSnapshot: false,
     serverTime: iso(nowMs),
   }
+}
+
+export function fixtureTranscript(sessionId: string): { messages: Message[]; parts: Record<string, Part[]> } {
+  const userMessageId = "msg_triage_user"
+  const assistantMessageId = "msg_triage_assistant"
+  const userPartId = "prt_triage_user_text"
+  const assistantPartId = "prt_triage_assistant_text"
+  const createdAt = 1_757_000_000_000
+
+  const messages: Message[] = [
+    {
+      id: userMessageId,
+      sessionID: sessionId,
+      role: "user",
+      time: { created: createdAt },
+      agent: "triage",
+      model: { providerID: "anthropic", modelID: "claude-sonnet-4-5" },
+    },
+    {
+      id: assistantMessageId,
+      sessionID: sessionId,
+      role: "assistant",
+      time: { created: createdAt + 1_000, completed: createdAt + 42_000 },
+      parentID: userMessageId,
+      modelID: "claude-sonnet-4-5",
+      providerID: "anthropic",
+      mode: "triage",
+      agent: "triage",
+      path: { cwd: "/incident", root: "/incident" },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    },
+  ]
+
+  const parts: Record<string, Part[]> = {
+    [userMessageId]: [
+      {
+        id: userPartId,
+        sessionID: sessionId,
+        messageID: userMessageId,
+        type: "text",
+        text: "Разбери причину сбоя оплаты на кассе.",
+      },
+    ],
+    [assistantMessageId]: [
+      {
+        id: assistantPartId,
+        sessionID: sessionId,
+        messageID: assistantMessageId,
+        type: "text",
+        text: "Причина — таймауты шлюза эквайринга на узле pay-gw-03.",
+      },
+    ],
+  }
+
+  return { messages, parts }
 }
