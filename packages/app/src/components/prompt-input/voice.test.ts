@@ -199,6 +199,51 @@ function installFakeAudio({ sampleRate = 16000 } = {}) {
 const loud = () => new Float32Array(160).fill(0.1)
 const quiet = () => new Float32Array(160)
 
+describe("detectVoiceActivity calibration", () => {
+  const idle = (): VoiceActivityState => ({ speechStarted: false, voicedMs: 0, finalized: false })
+
+  /** Feeds frames of a constant amplitude and reports when speech was declared. */
+  function speak(level: number, floorLevel: number, frames = 30) {
+    let state = idle()
+    let started = false
+    let now = 0
+    // Some room tone first, then the voice: the quiet part is what the detector
+    // has to learn from.
+    for (const amplitude of [...Array(10).fill(floorLevel), ...Array(frames).fill(level)]) {
+      now += 10
+      const next = detectVoiceActivity(state, new Float32Array(160).fill(amplitude), 16000, now, { minSpeechMs: 60 })
+      state = next.state
+      if (next.event === "speech-started") started = true
+    }
+    return started
+  }
+
+  test("hears a quiet microphone in a quiet room", () => {
+    // Far below the 0.015 constant this replaced: on such a microphone nothing
+    // was ever detected, so no phrase ever ended and the button looked dead.
+    expect(speak(0.006, 0.0008)).toBe(true)
+  })
+
+  test("does not mistake a noisy room for speech", () => {
+    // Above that same constant, which called steady room tone "speech" and left
+    // a phrase that never ended.
+    expect(speak(0.02, 0.02)).toBe(false)
+  })
+
+  test("still hears speech over that noisy room", () => {
+    expect(speak(0.12, 0.02)).toBe(true)
+  })
+
+  test("an explicit threshold overrides what was learned", () => {
+    let state = idle()
+    const loud = new Float32Array(160).fill(0.05)
+    const first = detectVoiceActivity(state, loud, 16000, 10, { minSpeechMs: 10, speechThreshold: 0.5 })
+    expect(first.event).toBeUndefined()
+    const second = detectVoiceActivity(state, loud, 16000, 20, { minSpeechMs: 10, speechThreshold: 0.01 })
+    expect(second.event).toBe("speech-started")
+  })
+})
+
 describe("recorder capture", () => {
   test("selects AudioWorklet only when both APIs are available", () => {
     expect(selectCaptureImplementation({}, false)).toBe("script-processor")

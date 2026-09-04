@@ -1102,6 +1102,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     // Continuous dictation keeps listening while earlier phrases are still being
     // recognized, so "is anything in flight" is a count, not a state.
     pending: 0,
+    // Whether speech is being heard right now, as opposed to the microphone
+    // merely being open. Without this a threshold set too high is
+    // indistinguishable from a broken button.
+    hearing: false,
   })
   const dictation = () => settings.general.dictation()
   const continuous = () => dictation() !== "utterance"
@@ -1148,6 +1152,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     recording = undefined
     if (!handle) return
     setVoiceStore("state", "finalizing")
+    setVoiceStore("hearing", false)
     try {
       const recorded = await handle.stop()
       if (!recorded) {
@@ -1194,8 +1199,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         silenceMs: voice.silenceMs,
         // Only `idle` mode arms the watchdog, so `onIdle` needs no mode check.
         idleMs: dictation() === "idle" ? DICTATION_IDLE_MS : undefined,
+        onSpeechStart: () => setVoiceStore("hearing", true),
         onLimit: () => void (continuous() ? flushSegment() : finishRecording()),
-        onSilence: () => void (continuous() ? flushSegment() : finishRecording()),
+        onSilence: () => {
+          setVoiceStore("hearing", false)
+          void (continuous() ? flushSegment() : finishRecording())
+        },
         onIdle: () => void finishRecording(),
       })
       setVoiceStore("state", "listening")
@@ -1209,6 +1218,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const handle = recording
     recording = undefined
     setVoiceStore("state", "idle")
+    setVoiceStore("hearing", false)
     await handle?.cancel()
   }
 
@@ -1222,6 +1232,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!handle) return
     recording = undefined
     setVoiceStore("state", "idle")
+    setVoiceStore("hearing", false)
     void handle.cancel()
   }
 
@@ -1275,6 +1286,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               data-action="prompt-voice"
               data-voice-state={voiceStore.state}
               data-voice-recognizing={recognizing() ? "true" : undefined}
+              data-voice-hearing={voiceStore.hearing ? "true" : undefined}
               type="button"
               variant="ghost"
               class="size-8"
@@ -1284,11 +1296,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               aria-label={voiceLabel()}
               onClick={() => void toggleVoice()}
             />
-            {/* Recording has to be obvious without comparing which icon is showing. */}
+            {/* Recording has to be obvious without comparing which icon is showing,
+                and hearing has to be distinguishable from merely being open —
+                otherwise a threshold set too high looks like a dead button. */}
             <Show when={voiceStore.state === "listening"}>
               <span
                 aria-hidden="true"
-                class="pointer-events-none absolute inset-0 rounded-md ring-2 ring-current opacity-60 animate-pulse"
+                class="pointer-events-none absolute inset-0 rounded-md ring-2 ring-current"
+                classList={{
+                  "opacity-100": voiceStore.hearing,
+                  "opacity-40 animate-pulse": !voiceStore.hearing,
+                }}
               />
             </Show>
             {/* Recognition can take seconds; without this it looks like nothing happened. */}

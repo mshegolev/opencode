@@ -20,7 +20,22 @@ export const MIN_RECORDING_SECONDS = 0.5
 /** Above this the endpoint says it heard speech, but does not believe it. */
 export const NO_SPEECH_SUSPECT = 0.6
 export const DEFAULT_SILENCE_MS = 1200
-export const DEFAULT_SPEECH_THRESHOLD = 0.015
+/**
+ * Speech is decided against the room, not against a constant. A fixed threshold
+ * was picked on one microphone: too high for a quiet laptop and no phrase ever
+ * ended, too low in a noisy room and none ever started. Both failed in silence.
+ *
+ * The floor is seeded from the first frame and then follows the frames that are
+ * not speech, so the rule adapts to a room that gets louder. The bounds keep it
+ * honest at the extremes: nothing counts as speech below MIN (a dead microphone
+ * must not become a hair trigger), and MAX stops a very loud room from raising
+ * the bar past a raised voice.
+ */
+export const NOISE_FLOOR_FACTOR = 3
+export const MIN_SPEECH_THRESHOLD = 0.004
+export const MAX_SPEECH_THRESHOLD = 0.05
+/** How fast the floor follows the room: one frame moves it a tenth of the way. */
+export const NOISE_FLOOR_ALPHA = 0.1
 export const DEFAULT_MIN_SPEECH_MS = 160
 
 export type VoiceTranscript = {
@@ -181,6 +196,8 @@ export type VoiceActivityState = {
   voicedMs: number
   lastVoiceAt?: number
   finalized: boolean
+  /** Running estimate of the room, in RMS. Absent until the first frame. */
+  noiseFloor?: number
 }
 
 export type VoiceActivityEvent = "speech-started" | "silence"
@@ -214,27 +231,38 @@ export function detectVoiceActivity(
   options: Pick<RecorderOptions, "silenceMs" | "speechThreshold" | "minSpeechMs"> = {},
 ): { state: VoiceActivityState; event?: VoiceActivityEvent } {
   if (state.finalized) return { state }
-  const threshold = options.speechThreshold ?? DEFAULT_SPEECH_THRESHOLD
   const silenceMs = options.silenceMs ?? DEFAULT_SILENCE_MS
   const minSpeechMs = options.minSpeechMs ?? DEFAULT_MIN_SPEECH_MS
-  const voiced = rootMeanSquare(samples) >= threshold
+  const level = rootMeanSquare(samples)
+  const threshold = options.speechThreshold ?? speechThreshold(state.noiseFloor ?? level)
+  const voiced = level >= threshold
+  // Only what is not speech teaches the detector what the room sounds like.
+  const noiseFloor = voiced
+    ? (state.noiseFloor ?? level)
+    : state.noiseFloor === undefined
+      ? level
+      : state.noiseFloor + (level - state.noiseFloor) * NOISE_FLOOR_ALPHA
   const frameMs = (samples.length / sampleRate) * 1000
   const voicedMs = voiced ? state.voicedMs + frameMs : state.speechStarted ? state.voicedMs : 0
   const lastVoiceAt = voiced ? now : state.lastVoiceAt
 
   if (!state.speechStarted && voicedMs >= minSpeechMs) {
     return {
-      state: { speechStarted: true, voicedMs, lastVoiceAt: now, finalized: false },
+      state: { speechStarted: true, voicedMs, lastVoiceAt: now, finalized: false, noiseFloor },
       event: "speech-started",
     }
   }
   if (state.speechStarted && lastVoiceAt !== undefined && now - lastVoiceAt >= silenceMs) {
     return {
-      state: { speechStarted: true, voicedMs, lastVoiceAt, finalized: true },
+      state: { speechStarted: true, voicedMs, lastVoiceAt, finalized: true, noiseFloor },
       event: "silence",
     }
   }
-  return { state: { speechStarted: state.speechStarted, voicedMs, lastVoiceAt, finalized: false } }
+  return { state: { speechStarted: state.speechStarted, voicedMs, lastVoiceAt, finalized: false, noiseFloor } }
+}
+
+export function speechThreshold(noiseFloor: number) {
+  return Math.min(MAX_SPEECH_THRESHOLD, Math.max(MIN_SPEECH_THRESHOLD, noiseFloor * NOISE_FLOOR_FACTOR))
 }
 
 function rootMeanSquare(samples: Float32Array) {
