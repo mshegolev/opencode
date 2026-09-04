@@ -14,7 +14,8 @@ describe("serverOffsetMs", () => {
 
 describe("ingestStale", () => {
   test("is false while events keep arriving", () => {
-    expect(ingestStale(fixtureQueuePage("all", NOW), NOW)).toBe(false)
+    const page = { ...fixtureQueuePage("all", NOW), lastEventAt: new Date(NOW - 12_000).toISOString() }
+    expect(ingestStale(page, NOW)).toBe(false)
   })
 
   test("is true once the stream goes quiet past the threshold", () => {
