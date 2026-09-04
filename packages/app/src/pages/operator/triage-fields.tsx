@@ -34,7 +34,7 @@ export function TriageFields(props: { fields: TriageFieldSet }) {
           <For each={props.fields.notChecked}>{(item) => <div>{item}</div>}</For>
         </Row>
       </div>
-      <p class="mt-3 border-l border-border-warning-base bg-background-strong px-3 py-2 text-sm">
+      <p class="mt-3 border-l-[3px] border-border-warning-base bg-background-strong px-3 py-2 text-sm">
         <strong>{CONFIDENCE[props.fields.confidence]}.</strong> {props.fields.confidenceNote}
       </p>
     </div>

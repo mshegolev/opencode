@@ -3,6 +3,22 @@ import type { IncidentDetail, IncidentRow, QueuePage, QueueScope } from "./types
 
 const iso = (ms: number) => new Date(ms).toISOString()
 
+// Captured once, when this module first loads (effectively "the moment the app opened").
+// Breach deadlines and the last-ingest-event instant are expressed relative to this fixed
+// point rather than to the `nowMs` argument each call receives. `readQueue` passes a fresh
+// `Date.now()` on every 30s refetch — anchoring to that would make every deadline (and the
+// ingest clock) hop back to its starting distance twice a minute, which is why the countdown
+// used to look dead and the staleness banner could never engage. Anchoring here instead means
+// a breach instant is a fixed point in real time, so `remainingMs = breachInstant - nowMs`
+// genuinely shrinks as real seconds pass, and `lastEventAt` genuinely ages past the ingest
+// threshold once the app has been open long enough — instead of resetting every refetch.
+const FIXTURE_ANCHOR_MS = Date.now()
+
+/** A fixed instant `offsetMs` away from the module-load anchor — negative is already past. */
+function anchoredAt(offsetMs: number): number {
+  return FIXTURE_ANCHOR_MS + offsetMs
+}
+
 function rows(nowMs: number): IncidentRow[] {
   const captured = iso(nowMs - 5_000)
   return [
@@ -13,7 +29,12 @@ function rows(nowMs: number): IncidentRow[] {
       assignedToMe: true,
       group: "Платежи",
       status: "In progress",
-      sla: { clockState: "running", remainingMs: 41 * 60_000, breachAt: iso(nowMs + 41 * 60_000), capturedAt: captured },
+      sla: {
+        clockState: "running",
+        remainingMs: anchoredAt(41 * 60_000) - nowMs,
+        breachAt: iso(anchoredAt(41 * 60_000)),
+        capturedAt: captured,
+      },
       triage: "ready",
       sessionId: "ses_048812",
     },
@@ -24,7 +45,12 @@ function rows(nowMs: number): IncidentRow[] {
       assignedToMe: false,
       group: "Платежи",
       status: "New",
-      sla: { clockState: "running", remainingMs: 67 * 60_000, breachAt: iso(nowMs + 67 * 60_000), capturedAt: captured },
+      sla: {
+        clockState: "running",
+        remainingMs: anchoredAt(67 * 60_000) - nowMs,
+        breachAt: iso(anchoredAt(67 * 60_000)),
+        capturedAt: captured,
+      },
       triage: "running",
     },
     {
@@ -34,7 +60,12 @@ function rows(nowMs: number): IncidentRow[] {
       assignedToMe: true,
       group: "Отчётность",
       status: "In progress",
-      sla: { clockState: "running", remainingMs: 192 * 60_000, breachAt: iso(nowMs + 192 * 60_000), capturedAt: captured },
+      sla: {
+        clockState: "running",
+        remainingMs: anchoredAt(192 * 60_000) - nowMs,
+        breachAt: iso(anchoredAt(192 * 60_000)),
+        capturedAt: captured,
+      },
       triage: "running",
       sessionId: "ses_048790",
     },
@@ -45,6 +76,7 @@ function rows(nowMs: number): IncidentRow[] {
       assignedToMe: false,
       group: "Каталог",
       status: "On hold",
+      // Paused: the clock does not run, so remaining time is a flat constant — not anchored.
       sla: { clockState: "paused", remainingMs: 115 * 60_000, capturedAt: captured },
       triage: "ready",
       sessionId: "ses_048771",
@@ -56,7 +88,12 @@ function rows(nowMs: number): IncidentRow[] {
       assignedToMe: false,
       group: "Портал",
       status: "New",
-      sla: { clockState: "running", remainingMs: 52 * 3_600_000, breachAt: iso(nowMs + 52 * 3_600_000), capturedAt: captured },
+      sla: {
+        clockState: "running",
+        remainingMs: anchoredAt(52 * 3_600_000) - nowMs,
+        breachAt: iso(anchoredAt(52 * 3_600_000)),
+        capturedAt: captured,
+      },
       triage: "not-started",
     },
     {
@@ -66,8 +103,14 @@ function rows(nowMs: number): IncidentRow[] {
       assignedToMe: false,
       group: "Аутентификация",
       status: "New",
-      // Deliberately stale: exercises the age treatment.
-      sla: { clockState: "running", remainingMs: 348 * 60_000, breachAt: iso(nowMs + 348 * 60_000), capturedAt: iso(nowMs - 240_000) },
+      // Deliberately stale: exercises the age treatment. capturedAt stays live off nowMs so it
+      // is always ~4 minutes old, regardless of how long the module has been loaded.
+      sla: {
+        clockState: "running",
+        remainingMs: anchoredAt(348 * 60_000) - nowMs,
+        breachAt: iso(anchoredAt(348 * 60_000)),
+        capturedAt: iso(nowMs - 240_000),
+      },
       triage: "unknown",
     },
     {
@@ -77,7 +120,8 @@ function rows(nowMs: number): IncidentRow[] {
       assignedToMe: false,
       group: "Контент",
       status: "In progress",
-      sla: { clockState: "breached", breachAt: iso(nowMs - 34 * 60_000), capturedAt: captured },
+      // Deliberately breached: the deadline is anchored in the past and stays there.
+      sla: { clockState: "breached", breachAt: iso(anchoredAt(-34 * 60_000)), capturedAt: captured },
       triage: "nothing-to-triage",
     },
     {
@@ -100,7 +144,11 @@ export function fixtureQueuePage(scope: QueueScope, nowMs: number): QueuePage {
     scope,
     rows: visible,
     serverTime: iso(nowMs),
-    lastEventAt: iso(nowMs - 12_000),
+    // Anchored to module load, not nowMs: the last ingest event is a fixed instant, so the
+    // silence since it arrived genuinely grows with real elapsed time instead of resetting to
+    // "12 seconds ago" on every 30s refetch — which is what made the staleness banner
+    // unreachable before.
+    lastEventAt: iso(anchoredAt(-12_000)),
     counts: {
       mine: all.filter((r) => r.assignedToMe).length,
       group: all.filter((r) => !r.assignedToMe).length,
@@ -131,7 +179,10 @@ export function fixtureIncidentDetail(number: string, nowMs: number): IncidentDe
             confidenceNote: "Корреляция по времени и по узлу сходится, но прямой ошибки от шлюза в журналах не видно.",
           }
         : undefined,
-    fromSnapshot: false,
+    // INC0048771 (paused) is the one incident whose detail is deliberately served from the
+    // projection snapshot, so the "показан снимок" banner on the incident screen is a state a
+    // person can actually open rather than dead code no fixture ever reaches.
+    fromSnapshot: number === "INC0048771",
     serverTime: iso(nowMs),
   }
 }
