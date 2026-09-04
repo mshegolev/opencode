@@ -43,9 +43,21 @@ function toneFor(ms: number): ClockTone {
   return "calm"
 }
 
-function hhmm(iso: string): string {
+/**
+ * An instant rendered in the operator's own local time. The instant itself still comes from the
+ * server — only its presentation is local, which is the only form an operator can act on. In UTC
+ * it would show a confidently wrong wall-clock time to anyone not on UTC, with no marker saying
+ * so, on the very path that exists to stay trustworthy when everything else is not. This does not
+ * weaken "the browser clock never enters the calculation": no duration is derived from
+ * `Date.now()` here, only a timezone applied to an instant the server chose.
+ */
+export function localHhMm(iso: string): string {
   const d = new Date(iso)
-  return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function ageCaption(ageMs: number): string {
+  return `данные ${Math.round(ageMs / 60_000)} мин назад`
 }
 
 export function slaClockView(input: ClockInput): ClockView {
@@ -58,7 +70,7 @@ export function slaClockView(input: ClockInput): ClockView {
 
   if (serverNowMs === null) {
     return {
-      display: snapshot.breachAt ? `до ${hhmm(snapshot.breachAt)}` : "—",
+      display: snapshot.breachAt ? `до ${localHhMm(snapshot.breachAt)}` : "—",
       caption: "время сервера неизвестно",
       tone: snapshot.clockState === "breached" ? "breached" : "calm",
       stale: false,
@@ -67,13 +79,18 @@ export function slaClockView(input: ClockInput): ClockView {
   }
 
   const ageMs = Math.max(0, serverNowMs - Date.parse(snapshot.capturedAt))
+  const stale = ageMs > staleAfter
 
+  // A hold is reversible, so an old "paused" snapshot cannot assert that the clock is still on
+  // hold: it may have been released hours ago and the deadline may now be minutes away. Say the
+  // clock was on hold as of a stated age instead. Breach is monotone — once past, always past —
+  // which is why the branch below can honestly report `stale: false` and this one cannot.
   if (snapshot.clockState === "paused") {
     return {
       display: format(snapshot.remainingMs ?? 0),
-      caption: "на паузе",
+      caption: stale ? `на паузе, ${ageCaption(ageMs)}` : "на паузе",
       tone: "paused",
-      stale: false,
+      stale,
       ageMs,
     }
   }
@@ -83,7 +100,6 @@ export function slaClockView(input: ClockInput): ClockView {
     return { display: `−${format(over)}`, caption: "нарушен", tone: "breached", stale: false, ageMs }
   }
 
-  const stale = ageMs > staleAfter
   const remaining = snapshot.remainingMs ?? 0
   const projected = remaining - ageMs
 
@@ -99,7 +115,7 @@ export function slaClockView(input: ClockInput): ClockView {
 
   return {
     display: format(left),
-    caption: stale ? `данные ${Math.round(ageMs / 60_000)} мин назад` : "осталось",
+    caption: stale ? ageCaption(ageMs) : "осталось",
     tone: toneFor(left),
     stale,
     ageMs,
