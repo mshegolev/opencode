@@ -1,0 +1,471 @@
+<title>The AI Triage Handoff</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,600;1,6..72,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --paper:#f5f7f8; --surface:#ffffff; --surface-2:#eceff1; --rule:#d5dcdf;
+  --ink:#101619; --ink-2:#3b474e; --muted:#647278;
+  --accent:#24506b; --accent-soft:#e2ebf0;
+  --verified:#2d6a4f; --verified-bg:#e4efe8;
+  --unverified:#8a6d1f; --unverified-bg:#f6eed8;
+  --disputed:#a3521c; --disputed-bg:#f8e8db;
+  --overturned:#8b2f3d; --overturned-bg:#f7e2e5;
+  --shadow:0 1px 2px rgba(16,22,25,.06),0 8px 24px -16px rgba(16,22,25,.28);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#0d1214; --surface:#141b1f; --surface-2:#1b242a; --rule:#2b373e;
+    --ink:#e8eef0; --ink-2:#bcc8cd; --muted:#8b9aa1;
+    --accent:#7fb3d0; --accent-soft:#1a2b36;
+    --verified:#7cc39c; --verified-bg:#16281f;
+    --unverified:#d9b45f; --unverified-bg:#2a2314;
+    --disputed:#e0925c; --disputed-bg:#2e1f14;
+    --overturned:#e08a97; --overturned-bg:#2d171b;
+    --shadow:0 1px 2px rgba(0,0,0,.5),0 8px 24px -16px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0d1214; --surface:#141b1f; --surface-2:#1b242a; --rule:#2b373e;
+  --ink:#e8eef0; --ink-2:#bcc8cd; --muted:#8b9aa1;
+  --accent:#7fb3d0; --accent-soft:#1a2b36;
+  --verified:#7cc39c; --verified-bg:#16281f;
+  --unverified:#d9b45f; --unverified-bg:#2a2314;
+  --disputed:#e0925c; --disputed-bg:#2e1f14;
+  --overturned:#e08a97; --overturned-bg:#2d171b;
+  --shadow:0 1px 2px rgba(0,0,0,.5),0 8px 24px -16px rgba(0,0,0,.8);
+}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);
+  font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16px;line-height:1.62;-webkit-font-smoothing:antialiased}
+.wrap{max-width:860px;margin:0 auto;padding:0 24px 96px}
+h1,h2,h3{font-family:Newsreader,Georgia,"Times New Roman",serif;text-wrap:balance;margin:0}
+h1{font-size:clamp(2.1rem,5vw,3.1rem);line-height:1.08;font-weight:600;letter-spacing:-.015em}
+h2{font-size:clamp(1.5rem,3vw,1.95rem);line-height:1.16;font-weight:600;margin-bottom:.2em}
+h3{font-size:1.16rem;font-weight:600;line-height:1.3}
+p{margin:0 0 1.05em;max-width:66ch}
+a{color:var(--accent)}
+.eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.72rem;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 .7em}
+
+/* header */
+header{padding:56px 0 34px;border-bottom:2px solid var(--ink)}
+.decision{font-family:Newsreader,Georgia,serif;font-size:1.16rem;font-style:italic;
+  color:var(--ink-2);max-width:60ch;margin:1.1em 0 1.5em}
+.meta{display:flex;flex-wrap:wrap;gap:0 28px;font-family:"IBM Plex Mono",monospace;
+  font-size:.75rem;color:var(--muted);border-top:1px solid var(--rule);padding-top:14px}
+.meta b{color:var(--ink-2);font-weight:500}
+
+/* ledger tallies */
+.ledger{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;
+  background:var(--rule);border:1px solid var(--rule);margin:34px 0 0}
+.ledger div{background:var(--surface);padding:14px 16px}
+.ledger .n{font-family:"IBM Plex Mono",monospace;font-size:1.5rem;font-weight:500;
+  font-variant-numeric:tabular-nums;display:block;line-height:1.1}
+.ledger .k{font-family:"IBM Plex Mono",monospace;font-size:.68rem;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted)}
+.ledger .v .n{color:var(--verified)} .ledger .u .n{color:var(--unverified)}
+.ledger .d .n{color:var(--disputed)} .ledger .o .n{color:var(--overturned)}
+
+/* verdict */
+.verdict{background:var(--surface);border:1px solid var(--rule);border-left:5px solid var(--accent);
+  padding:30px 32px;margin:44px 0;box-shadow:var(--shadow)}
+.verdict p:last-child{margin-bottom:0}
+.verdict .lead{font-family:Newsreader,Georgia,serif;font-size:1.32rem;line-height:1.42;
+  color:var(--ink);margin-bottom:.85em}
+
+section{margin:60px 0 0;scroll-margin-top:20px}
+.sub{color:var(--muted);font-size:.95rem;margin:.3em 0 1.6em;max-width:62ch}
+
+/* status chips */
+.chip{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:.66rem;
+  letter-spacing:.09em;text-transform:uppercase;padding:2px 7px;border:1px solid;
+  vertical-align:1px;white-space:nowrap}
+.chip.v{color:var(--verified);background:var(--verified-bg);border-color:var(--verified);opacity:.82}
+.chip.u{color:var(--unverified);background:var(--unverified-bg);border-color:var(--unverified);font-weight:500}
+.chip.d{color:var(--disputed);background:var(--disputed-bg);border-color:var(--disputed);font-weight:500}
+.chip.o{color:var(--overturned);background:var(--overturned-bg);border-color:var(--overturned);font-weight:500}
+
+/* finding rows */
+.finding{border-top:1px solid var(--rule);padding:18px 0}
+.finding:last-of-type{border-bottom:1px solid var(--rule)}
+.finding .top{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;margin-bottom:.45em}
+.finding .top h3{flex:1 1 22ch}
+.finding p{margin:0;color:var(--ink-2);font-size:.95rem}
+.finding p + p{margin-top:.6em}
+
+/* the hinge chart */
+figure{margin:34px 0;background:var(--surface);border:1px solid var(--rule);padding:24px 22px}
+figcaption{font-size:.85rem;color:var(--muted);margin-top:14px;max-width:62ch}
+svg{display:block;width:100%;height:auto}
+.ax{stroke:var(--rule);stroke-width:1}
+.tk{fill:var(--muted);font-family:"IBM Plex Mono",monospace;font-size:11px}
+.bl{fill:var(--ink-2);font-family:"IBM Plex Sans",sans-serif;font-size:13px;font-weight:500}
+.bn{fill:var(--muted);font-family:"IBM Plex Mono",monospace;font-size:11px}
+
+/* tables */
+.scroll{overflow-x:auto;margin:22px 0}
+table{border-collapse:collapse;width:100%;font-size:.9rem;min-width:520px}
+th,td{text-align:left;padding:10px 14px 10px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-family:"IBM Plex Mono",monospace;font-size:.68rem;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted);font-weight:400;border-bottom:1px solid var(--ink-2)}
+td:last-child,th:last-child{padding-right:0}
+code{font-family:"IBM Plex Mono",monospace;font-size:.86em;background:var(--surface-2);padding:1px 5px}
+
+/* gaps list */
+.gaps{background:var(--surface-2);border:1px solid var(--rule);padding:22px 26px;margin:26px 0}
+.gaps ul{margin:0;padding-left:1.15em}
+.gaps li{margin-bottom:.5em;color:var(--ink-2);font-size:.93rem;max-width:64ch}
+.gaps li:last-child{margin-bottom:0}
+.gaps .eyebrow{margin-bottom:.9em}
+
+details{border-top:1px solid var(--rule);padding:16px 0}
+summary{cursor:pointer;font-family:"IBM Plex Mono",monospace;font-size:.75rem;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+footer{margin-top:64px;padding-top:22px;border-top:2px solid var(--ink);
+  font-family:"IBM Plex Mono",monospace;font-size:.75rem;color:var(--muted)}
+footer p{max-width:64ch}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">Deep Recon · three runs · user-voice / competitive / technical</p>
+  <h1>The AI Triage Handoff</h1>
+  <p class="decision">Should we build the loop — an AI service watches ITSM for new incidents, opens a session keyed by the incident number, triages it, and writes that session's link back into the ticket for the operator to continue from — and what belongs in v1?</p>
+  <div class="meta">
+    <span><b>Assembled</b> 2026-09-04</span>
+    <span><b>Depth</b> 2 rounds</span>
+    <span><b>Preset</b> standard</span>
+    <span><b>Validation</b> normal</span>
+    <span><b>Shape</b> explore</span>
+  </div>
+  <div class="ledger">
+    <div class="v"><span class="n">2</span><span class="k">verified</span></div>
+    <div class="u"><span class="n">24</span><span class="k">unverified</span></div>
+    <div class="d"><span class="n">1</span><span class="k">disputed</span></div>
+    <div class="o"><span class="n">3</span><span class="k">overturned</span></div>
+  </div>
+</header>
+
+<div class="verdict">
+  <p class="lead">Do not build this as a time-saving measure until you have measured the saving on your own queue. Everything else in these three runs is secondary to one unresolved 20&times; gap.</p>
+  <p>The mechanism is buildable and its failure modes are documented. The competitive picture is more interesting than expected: nobody points a ticket at an AI's investigation, and the consistency of that is itself evidence. But the case for the loop rests on time saved, and the only practitioner figure retrieved is roughly twenty times smaller than the vendor figure — small enough that any verification step turns the saving negative.</p>
+  <p>The cheap move is to measure before committing. The expensive move is to build the loop and discover the gain was fifteen seconds.</p>
+</div>
+
+<section>
+  <h2>The hinge</h2>
+  <p class="sub">One unresolved gap decides the project. Everything below is downstream of which figure describes your queue.</p>
+
+  <figure>
+    <svg viewBox="0 0 660 210" role="img" aria-label="Reported time saved per ticket: a practitioner reports 10 to 20 seconds; vendor material for the same class of feature reports 4 to 7 minutes.">
+      <text class="bl" x="0" y="20">Reported time saved per ticket</text>
+
+      <text class="bl" x="150" y="66" text-anchor="end">Practitioner,</text>
+      <text class="bl" x="150" y="82" text-anchor="end">live service desk</text>
+      <rect x="162" y="52" width="13" height="30" fill="var(--overturned)"></rect>
+      <text class="bn" x="183" y="72">10&ndash;20 sec</text>
+
+      <text class="bl" x="150" y="126" text-anchor="end">Vendor figure,</text>
+      <text class="bl" x="150" y="142" text-anchor="end">same feature class</text>
+      <rect x="459" y="112" width="223" height="30" fill="var(--accent)" opacity="0.28"></rect>
+      <rect x="459" y="112" width="223" height="30" fill="none" stroke="var(--accent)" stroke-width="1.5"></rect>
+      <text class="bn" x="452" y="132" text-anchor="end">4&ndash;7 min</text>
+
+      <line class="ax" x1="150" y1="166" x2="682" y2="166"></line>
+      <line class="ax" x1="150" y1="166" x2="150" y2="171"></line>
+      <line class="ax" x1="283" y1="166" x2="283" y2="171"></line>
+      <line class="ax" x1="416" y1="166" x2="416" y2="171"></line>
+      <line class="ax" x1="549" y1="166" x2="549" y2="171"></line>
+      <line class="ax" x1="682" y1="166" x2="682" y2="171"></line>
+      <text class="tk" x="150" y="186" text-anchor="middle">0</text>
+      <text class="tk" x="283" y="186" text-anchor="middle">105s</text>
+      <text class="tk" x="416" y="186" text-anchor="middle">210s</text>
+      <text class="tk" x="549" y="186" text-anchor="middle">315s</text>
+      <text class="tk" x="682" y="186" text-anchor="end">420s</text>
+      <text class="tk" x="150" y="204">seconds saved per ticket &mdash; linear scale</text>
+    </svg>
+    <figcaption>A ServiceNow Community practitioner running Now Assist on a live service desk reports 10&ndash;20 seconds per ticket <span class="chip u">unverified</span>. Vendor material for the same class of feature circulates 4&ndash;7 minutes. Nothing retrieved in two rounds resolves the gap. At the practitioner's number, a fifteen-second verification step consumes the entire saving.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>Will operators read it?</h2>
+  <p class="sub">User-voice run &middot; 12 sources &middot; the run that changed the answer</p>
+
+  <div class="finding">
+    <div class="top"><h3>The measured evidence is negative, and it disqualifies the rest</h3><span class="chip v">verified</span></div>
+    <p>METR's randomized trial put 16 experienced developers on 246 real issues in codebases they knew well. They were <strong>19% slower</strong> with AI while believing they were about 20% faster.</p>
+    <p>That ~39-point perception gap does more than supply an analogy. Every trust figure in this research is self-reported &mdash; so all of them are downgraded. Asking your operators whether the handoff helps will not tell you whether it does.</p>
+  </div>
+
+  <div class="finding">
+    <div class="top"><h3>How universally operators verify AI output is disputed</h3><span class="chip d">disputed</span></div>
+    <p>Three instruments, reported side by side and deliberately not averaged: 93% of contact-centre agents (UJET, n=250), ~35% of general working AI users (Kolmogorov/Pollfish, n=500), and 47% of IT professionals (SolarWinds State of ITSM, n=844 &mdash; the only IT-service-desk instrument found).</p>
+    <p>What survives all three readings: checking AI output is routine, not exceptional. Discard the precision, keep the direction.</p>
+  </div>
+
+  <div class="finding">
+    <div class="top"><h3>Checking is not rejecting</h3><span class="chip u">unverified</span></div>
+    <p>The same populations report real savings — roughly 70% credit AI with reduced after-call work, and IT professionals report 2.8 hours per week saved documenting incidents even as 52% report their overall workload rising. Verification is the price of the handoff, not a veto on it.</p>
+  </div>
+
+  <div class="finding">
+    <div class="top"><h3>The AI is weakest exactly where triage lives</h3><span class="chip u">unverified</span></div>
+    <p>The same practitioner behind the 10&ndash;20 second figure names the two failure modes: the assistant "sometimes misinterprets system logs or stack traces", and vague tickets produce nothing useful — garbage in, garbage out.</p>
+    <p>Logs, stack traces and one-line tickets are not edge cases in an incident queue. They are the queue. A tool reliable in the easy middle saves time on the tickets that were already cheap.</p>
+  </div>
+
+  <div class="finding">
+    <div class="top"><h3>Verification discipline is not yet a deployer norm</h3><span class="chip u">unverified</span></div>
+    <p>Three universities run the <em>same</em> TeamDynamix AI summary feature. Cornell warns about observed hallucination and mandates review before sharing. Northwestern only tells technicians to remain confident in their own expertise. University of Florida documents the feature with no accuracy guidance at all.</p>
+    <p><strong>One deployer in three instructs verification.</strong> Round 1 read Cornell's caution as representative; it is not. If an unreviewed AI conclusion reaching a customer is unacceptable, that must be enforced in the product, not in a policy page.</p>
+  </div>
+
+  <div class="gaps">
+    <p class="eyebrow">What this run could not establish</p>
+    <ul>
+      <li><strong>No public measurement of verification cost exists.</strong> Every ITSM figure retrieved is a gross, uncontrolled, vendor-sourced time-saved number that never separates checking time from working time.</li>
+      <li><strong>Reddit and G2 were both hard-blocked across two rounds</strong> — G2 returned HTTP 403 reproducibly. The pack's core method, mining the venues where people lie less, never executed. No first-hand operator voice reached this report.</li>
+      <li><strong>Zero evidence about the proposed mechanism.</strong> No source describes an operator following a link out of a ticket into an AI's prior working session.</li>
+      <li><strong>Does source attribution earn trust?</strong> Vendor and deployer design intent points that way; no operator said it. Neither confirmed nor refuted.</li>
+      <li>The decisive 10&ndash;20 second figure rests on <strong>one practitioner in one forum thread</strong>, and is labelled as such rather than as prevalence.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <h2>Has anyone shipped it?</h2>
+  <p class="sub">Competitive run &middot; 10 sources &middot; one adversarial verification pass</p>
+
+  <div class="finding">
+    <div class="top"><h3>Pre-human AI triage is shipped and mature — and writes inline</h3><span class="chip u">unverified</span></div>
+    <p>ServiceNow's Now Assist agents fire when an incident is New with nobody assigned. Three narrow sequential agents write Category, Service and Configuration item, and Parent incident straight onto the record; their reasoning goes to Work notes and Additional comments. No separate AI session, no link to one.</p>
+    <p>The architecture is the better takeaway: <strong>three narrow agents each owning named fields, not one general agent producing prose.</strong> A structured field is verifiable at a glance — which is the cheapest way to lower the cost of verification.</p>
+  </div>
+
+  <div class="finding">
+    <div class="top"><h3>The absence claim was adversarially tested and overturned — narrowly</h3><span class="chip o">overturned</span></div>
+    <p>A verifier was briefed specifically to disprove "nobody links a separate AI session from a ticket". It found one: Zendesk's voice-channel AI agent (EAP) writes "a link to view the AI agent conversation in the conversation logs" into the ticket.</p>
+    <p>Two bounds on what that proves: the linked record is the AI's conversation <em>with the caller</em>, not an investigation, and the feature is early-access on one channel.</p>
+  </div>
+
+  <div class="finding">
+    <div class="top"><h3>The finding that survived two rounds is about direction</h3><span class="chip u">unverified</span></div>
+    <p>Freshservice documents navigation from the conversation log <em>to</em> the ticket, with no ticket-to-log link. PagerDuty holds the ServiceNow incident in its own incident's Linked Records; the ServiceNow-side form is not documented as carrying a PagerDuty URL. Datadog's Bits Investigation "prefills" ticket metadata — content transfer, the inline pattern again — and documents no investigation permalink at all.</p>
+    <p><strong>Across helpdesk vendors and AIOps vendors alike: the machine's record points at the ticket; the ticket does not point at the machine's record.</strong> Two readings stay live — either incumbents tested link-out and found operators will not leave the record, or nobody has had an investigation substantial enough to deserve its own page. The user-voice evidence leans toward the first.</p>
+  </div>
+
+  <div class="gaps">
+    <p class="eyebrow">What this run could not establish</p>
+    <ul>
+      <li><strong>Their customers' voice is essentially unretrieved.</strong> No review text, no forum complaints, no admin "we turned it off" reports, and <strong>no measured handle-time effect for any vendor</strong>. The competitive picture describes what is built, not what pays off.</li>
+      <li><strong>The perimeter is thin.</strong> Rootly, BigPanda, Moogsoft, Rovo, Front, Help Scout and Salesforce were never reached; incident.io was seen only at snippet level.</li>
+      <li><strong>Every Datadog page arrived through a summarizer</strong> — direct fetching is blocked from this environment. Its negative should be re-checked in a browser before being treated as settled.</li>
+      <li>Only the ServiceNow page carries a date, and at 2026-03 it is <strong>already outside this pack's 3-month freshness bar</strong>. Atlassian, Zendesk, Intercom and Salesforce pages are undated — no establishable freshness at all, which is worse than stale.</li>
+      <li>The Russian-market attempt (Omnidesk, Usedesk, Naumen) returned nothing usable, consistent with a US-only search surface.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <h2>Can it be built, and how does it break?</h2>
+  <p class="sub">Technical run &middot; 15 sources &middot; the run with primary evidence rather than opinion</p>
+
+  <div class="finding">
+    <div class="top"><h3>Deduplication is a v1 requirement, keyed on the incident number</h3><span class="chip v">verified</span></div>
+    <p>Jira states its webhooks are at-least-once outright. Zendesk refuses a delivery guarantee in as many words — "best effort&hellip; we can't guarantee it" — and tells you to make handlers idempotent.</p>
+    <p>Jira hands you <code>X-Atlassian-Webhook-Identifier</code>, stable across retries, and it is the wrong key. A delivery-scoped identifier defeats redelivery and nothing else; it is useless against the reconciliation sweep. <strong>Key on the incident number.</strong></p>
+  </div>
+
+  <div class="finding">
+    <div class="top"><h3>Four documented ways to lose incidents silently, one remedy</h3><span class="chip u">unverified</span></div>
+    <p>Jira degrades to a single delivery attempt after 30 minutes of failure. Jira dynamic webhooks expire at 30 days with no consumer-side error. Zendesk trips a circuit breaker at 70% errors in five minutes — and since its request timeout is 12 seconds, <strong>a slow handler trips it without any other fault</strong>. Nobody documents an ordering guarantee at all.</p>
+    <p>All four have the same answer: a reconciliation sweep keyed on the incident number, plus an alert on delivery drought. That sweep is endorsed by webhook-infrastructure vendors and by no ITSM platform — Atlassian's own page frames webhooks as removing the need to poll while documenting guarantees that require it.</p>
+  </div>
+
+  <div class="finding">
+    <div class="top"><h3>ServiceNow publishes no default rate limits at all</h3><span class="chip o">overturned</span></div>
+    <p>Round 2 read the vendor's own page and withdrew round 1's numbers. The mechanism is confirmed: rules in <code>sys_rate_limit_rules</code>, three rule types in priority order, per-node counts committed every 30 seconds, HTTP 429 carrying <code>X-RateLimit-Limit</code>, <code>X-RateLimit-Reset</code>, <code>X-RateLimit-Rule</code> and <code>Retry-After</code>.</p>
+    <p>But the circulating ~25,000-requests-per-hour figures are folklore. <strong>Assume no platform limit is enforced until an admin creates a rule, read the target instance's own rules, and treat <code>429</code> plus <code>Retry-After</code> as the only contract.</strong></p>
+  </div>
+
+  <div class="finding">
+    <div class="top"><h3>The journal-field role claim is withdrawn</h3><span class="chip o">overturned</span></div>
+    <p>ServiceNow's journal-fields page names Work notes and Additional comments and defines the field types — and says nothing about roles. It does not state that <code>work_notes</code> is <code>itil</code>-restricted or that <code>comments</code> is customer-visible. That is community lore about behaviour that is per-instance configurable. Verify against the target instance's ACLs before assuming an internal write is invisible to the caller.</p>
+  </div>
+
+  <div class="finding">
+    <div class="top"><h3>"Internal" is not a safety property</h3><span class="chip u">unverified</span></div>
+    <p>Atlassian's KB documents that a JSM comment posted public and later edited to internal <strong>has already dispatched the customer notification</strong>, and that bug JSDSERVER-6269 leaks internal @-mentions as core notifications. For a bot writing to every ticket the rule is: post internal-first, never re-classify.</p>
+  </div>
+
+  <div class="finding">
+    <div class="top"><h3>The session link has analogues, not precedent</h3><span class="chip u">unverified</span></div>
+    <p>Grafana's external share is read-only and executes <em>only</em> stored queries — the link never reaches a live query surface. Sentry's share URL does not exist until someone creates it, exposes a redacted projection, and is revoked by regenerating — with no documented expiry. W3C TAG capability-URL guidance names the leak vectors, including the one most often missed: the <code>Referer</code> header from outbound links on the protected page itself.</p>
+    <p>Assembled: explicitly created, frozen redacted projection, instantly revocable, <code>rel="noreferrer"</code>, plus an expiry the analogues do not give you. <strong>This is the part you will be designing rather than copying.</strong></p>
+  </div>
+</section>
+
+<section>
+  <h2>What only the combination shows</h2>
+  <p class="sub">Cross-run insights — the three runs disagree productively in two places</p>
+
+  <div class="finding">
+    <div class="top"><h3>The competitive silence and the operator evidence agree</h3></div>
+    <p>Nobody points a ticket at an AI session, and operators already juggle destinations and treat AI output as a draft to check. Read together, the industry's inline choice looks less like an unclaimed opportunity and more like a constraint others already hit. <strong>Lead with inline write-back; make the session link an addition for the deep trace, not the mechanism.</strong></p>
+  </div>
+
+  <div class="finding">
+    <div class="top"><h3>ServiceNow's architecture answers the user-voice problem</h3></div>
+    <p>Three narrow field-owning agents is a competitive observation. "The handoff must be cheap to verify, not merely correct" is a user-voice conclusion. They are the same finding seen from two sides: <strong>emit structured fields, not paragraphs</strong>, because a field is checkable at a glance and prose is not.</p>
+  </div>
+
+  <div class="finding">
+    <div class="top"><h3>The link and the write-back are one security decision</h3></div>
+    <p>A capability URL leaks through shorteners, address bars and <code>Referer</code>. An "internal" comment leaks through re-classification and mention bugs. Both put diagnostic content in front of a customer, and both are prevented at write time rather than detected afterwards.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Recommendations</h2>
+  <p class="sub">Each bound to the decision, each naming what its confidence rests on</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Do this</th><th>Why</th><th>Confidence basis</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Measure the gain on your own queue before building</strong></td><td>Instrument time from handoff opened to first independent operator action, and how often the operator re-runs a diagnostic the AI already ran</td><td>High — established absence of public data, plus a demonstration that self-report misleads by ~39 points</td></tr>
+        <tr><td><strong>Do not accept self-report as the measurement</strong></td><td>The only controlled trial found people wrong about their own speed, in the wrong direction</td><td>High — randomized controlled trial</td></tr>
+        <tr><td><strong>Lead with inline write-back</strong></td><td>Put the verifiable result in the ticket; offer the link only for the deep trace</td><td>Medium-high — inline pattern is vendor-documented across the field; the operator-preference half is argued, not measured</td></tr>
+        <tr><td><strong>Copy the narrow-agents architecture</strong></td><td>Several agents each owning named fields beat one writing prose, for verifiability as much as accuracy</td><td>High for what ServiceNow ships; the verifiability argument is inference</td></tr>
+        <tr><td><strong>Do not route logs and stack traces to the AI first</strong></td><td>The named failure mode and the highest-stakes content. Start where it is reported reliable</td><td>Medium — single practitioner, consistent with the thin-ticket pattern</td></tr>
+        <tr><td><strong>Key dedup on the incident number; run webhooks plus a sweep</strong></td><td>One answer to four documented silent-failure modes</td><td>High for the failure modes (vendor-documented); medium for the sweep (endorsed only by webhook-infrastructure vendors)</td></tr>
+        <tr><td><strong>Ack the webhook immediately, work asynchronously</strong></td><td>A synchronous AI call inside a 12-second handler takes the integration down by itself</td><td>High — vendor-documented</td></tr>
+        <tr><td><strong>Post internal-first, never re-classify</strong></td><td>Editing public&rarr;internal has already sent the customer notification</td><td>High — vendor KB naming a specific bug and affected versions</td></tr>
+        <tr><td><strong>Assume operators will not verify unless the product makes them</strong></td><td>One deployer in three instructs verification</td><td>Medium-high — three institutions' published policy, directly compared</td></tr>
+        <tr><td><strong>Treat "ticket links forward to the investigation" as a hypothesis</strong></td><td>Worth building to test; not worth claiming as a market insight</td><td>Low — an absence claim over an incomplete perimeter, already narrowed once by adversarial search</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>Open questions</h2>
+  <p class="sub">What the research could not answer, and what answering it would take</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Question</th><th>What it would take</th></tr></thead>
+      <tbody>
+        <tr><td>Is the gain 10&ndash;20 seconds or 4&ndash;7 minutes on your queue?</td><td>Instrumented pilot. This single question decides the project</td></tr>
+        <tr><td>What does verification cost per incident?</td><td>Same pilot; no public measurement exists</td></tr>
+        <tr><td>Would an operator follow a link out of the ticket at all?</td><td>Prototype test; zero public evidence about this mechanism</td></tr>
+        <tr><td>Do L2 engineers behave like contact-centre agents toward AI output?</td><td>Direct observation — every survey found samples a different job, and an L2 can re-run the diagnostic, which makes ignoring the handoff rational</td></tr>
+        <tr><td>Does source attribution actually earn operator trust?</td><td>Operator interviews, not vendor docs. Unresolved after two rounds</td></tr>
+        <tr><td>Does Datadog write an investigation URL into a ticket?</td><td>Browser read of the Bits Investigation and Case Management Jira-sync docs</td></tr>
+        <tr><td>Does ServiceNow offer native outbound table-change subscription?</td><td>A vendor page read through the SPA, not the docs index</td></tr>
+        <tr><td>What are your instance's actual rate-limit rules?</td><td><code>sys_rate_limit_rules_list.do</code> on that instance — minutes of work</td></tr>
+        <tr><td>Are <code>work_notes</code> invisible to the caller on your instance?</td><td>Instance ACL check; the vendor does not say</td></tr>
+        <tr><td>Did any incumbent try link-out and drop it?</td><td>Changelogs, release notes, and their community forums</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>Staleness</h2>
+  <p class="sub">Computed from the claims ledger against each pack's freshness bars, not hand-derived. This is the work order for a Refresh.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Claim</th><th>Run</th><th>Published</th><th>Re-check</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>ServiceNow triages pre-human; handoff is inline</td><td>competitive</td><td>2026-03</td><td>2026-06</td><td><span class="chip d">overdue</span> outside the 3-month bar, and load-bearing</td></tr>
+        <tr><td>Cornell mandates review of AI content</td><td>user-voice</td><td>undated</td><td>now</td><td><span class="chip d">undated</span> carries the deployer-behaviour finding</td></tr>
+        <tr><td>University of Florida gives no accuracy guidance</td><td>user-voice</td><td>undated</td><td>now</td><td><span class="chip d">undated</span> same finding, other side</td></tr>
+        <tr><td>W3C TAG capability-URL guidance</td><td>technical</td><td>2014</td><td>long overdue</td><td><span class="chip u">retained deliberately</span> vectors are structural to HTTP; nothing supersedes it</td></tr>
+        <tr><td>Northwestern: confidence-in-own-expertise only</td><td>user-voice</td><td>2025-05</td><td>2026-11</td><td>current, near expiry</td></tr>
+        <tr><td>Practitioner: 10&ndash;20 seconds per ticket</td><td>user-voice</td><td>2025-11</td><td>2027-05</td><td>current</td></tr>
+        <tr><td>METR: 19% slower, believed 20% faster</td><td>user-voice</td><td>2025-07</td><td>2027-01</td><td>current</td></tr>
+        <tr><td>ServiceNow rate-limit mechanism</td><td>technical</td><td>2026-03</td><td>2027-03</td><td>current</td></tr>
+        <tr><td>Jira / Zendesk delivery guarantees</td><td>technical</td><td>undated, living docs</td><td>2027-09</td><td>current — "current" means when they were read, not when written</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>Sources</h2>
+  <p class="sub">37 sources across three runs. Full per-claim citation, confidence and publisher live in the three run reports; the load-bearing ones are listed here.</p>
+
+  <details open>
+    <summary>User-voice &mdash; 12 sources</summary>
+    <div class="scroll"><table>
+      <thead><tr><th>#</th><th>Source</th><th>Publisher</th><th>Date</th><th>Confidence</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td><a href="https://www.nojitter.com/contact-centers/human-agents-double-check-what-ai-tells-them-ujet-survey-finds">Human agents double-check what AI tells them</a></td><td>No Jitter, reporting UJET (n=250)</td><td>2026-04-22</td><td>medium, disputed</td></tr>
+        <tr><td>2</td><td><a href="https://www.verint.com/blog/state-of-agent-experience-2026-ai-in-contact-centers-part-2/">State of Agent Experience 2026</a></td><td>Verint (n=1,000)</td><td>2026-05-05</td><td>medium</td></tr>
+        <tr><td>3</td><td><a href="https://it.cornell.edu/teamdynamix/tdx-ai-ticket-summaries">TDX AI ticket summaries</a></td><td>Cornell University IT</td><td>undated</td><td>medium</td></tr>
+        <tr><td>4</td><td><a href="https://www.openmsp.ai/blog/ai-ticket-triage-for-msps">AI ticket triage for MSPs</a></td><td>OpenMSP, quoting forums</td><td>2026</td><td>low</td></tr>
+        <tr><td>5</td><td>Capterra helpdesk review corpora</td><td>Capterra</td><td>undated</td><td>low</td></tr>
+        <tr><td>6</td><td>Survey of working AI users (n=500)</td><td>Kolmogorov Law / Pollfish</td><td>2026-09-01</td><td>medium</td></tr>
+        <tr><td>7</td><td>2026 State of ITSM (n=844)</td><td>SolarWinds</td><td>2026-08-26</td><td>medium — only ITSM instrument</td></tr>
+        <tr><td>8</td><td><a href="https://metr.org/blog/2025-07-10-early-2025-ai-experienced-os-dev-study/">Measuring the impact of AI on experienced developer productivity</a></td><td>METR</td><td>2025-07-10</td><td>high — RCT</td></tr>
+        <tr><td>9</td><td>Now Assist on a live service desk (practitioner thread)</td><td>ServiceNow Community</td><td>2025-11-27</td><td>medium — single practitioner</td></tr>
+        <tr><td>10</td><td>TDX agents get ticket assistance from AI</td><td>Northwestern University</td><td>2025-05-27</td><td>high for what it says</td></tr>
+        <tr><td>11</td><td>TeamDynamix AI Enhancements</td><td>University of Florida IT</td><td>undated</td><td>high for what it says</td></tr>
+        <tr><td>12</td><td>Engineering-metrics reporting (&gt;10,000 developers)</td><td>Faros AI</td><td>~2025-07</td><td>low-medium — second-hand</td></tr>
+      </tbody>
+    </table></div>
+  </details>
+
+  <details>
+    <summary>Competitive &mdash; 10 sources</summary>
+    <div class="scroll"><table>
+      <thead><tr><th>#</th><th>Source</th><th>Publisher</th><th>Date</th><th>Confidence</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td><a href="https://www.servicenow.com/docs/r/it-service-management/now-assist-for-it-service-management-itsm/now-assist-itsm-aiagents-catincidents-usecase.html">Now Assist ITSM AI agents for incident categorization</a></td><td>ServiceNow docs</td><td>2026-03-12</td><td>high</td></tr>
+        <tr><td>2</td><td><a href="https://support.atlassian.com/organization-administration/docs/atlassian-intelligence-features-in-jira-service-management/">Atlassian Intelligence in JSM</a></td><td>Atlassian Support</td><td>undated</td><td>medium</td></tr>
+        <tr><td>3</td><td><a href="https://support.zendesk.com/hc/en-us/articles/4408824482586-Managing-conversation-handoff-and-handback">Managing conversation handoff and handback</a></td><td>Zendesk Support</td><td>undated</td><td>high that the page is silent</td></tr>
+        <tr><td>4</td><td><a href="https://www.intercom.com/help/en/articles/12396892-manage-fin-ai-agent-s-escalation-guidance-and-rules">Fin escalation guidance and rules</a></td><td>Intercom Help</td><td>undated</td><td>low — snippet only</td></tr>
+        <tr><td>5</td><td><a href="https://help.salesforce.com/s/articleView?language=en_US&amp;id=ai.service_agent_escalation.htm&amp;type=5">Agentforce Service Agent escalation</a></td><td>Salesforce Help</td><td>undated</td><td>low — snippet only</td></tr>
+        <tr><td>6</td><td>Zendesk teardowns</td><td>eesel AI, Kustomer (competitors)</td><td>2026</td><td>low</td></tr>
+        <tr><td>7</td><td><a href="https://support.zendesk.com/hc/en-us/articles/10169333291290-Creating-an-AI-agent-for-the-voice-channel-EAP">AI agent for the voice channel (EAP)</a></td><td>Zendesk Support</td><td>undated</td><td>medium — the counter-example</td></tr>
+        <tr><td>8</td><td>Freddy AI Agent conversation logs</td><td>Freshworks</td><td>undated</td><td>medium</td></tr>
+        <tr><td>9</td><td><a href="https://docs.datadoghq.com/bits_ai/bits_investigation/">Bits Investigation</a></td><td>Datadog</td><td>undated</td><td>low — summarizer only</td></tr>
+        <tr><td>10</td><td><a href="https://support.pagerduty.com/main/docs/servicenow-user-guide">ServiceNow user guide</a></td><td>PagerDuty</td><td>2026-03-19</td><td>medium</td></tr>
+      </tbody>
+    </table></div>
+  </details>
+
+  <details>
+    <summary>Technical &mdash; 15 sources</summary>
+    <div class="scroll"><table>
+      <thead><tr><th>#</th><th>Source</th><th>Publisher</th><th>Date</th><th>Confidence</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td><a href="https://developer.atlassian.com/cloud/jira/platform/webhooks/">Jira Cloud platform webhooks</a></td><td>Atlassian</td><td>living doc</td><td>high</td></tr>
+        <tr><td>2</td><td><a href="https://community.developer.atlassian.com/t/new-jira-cloud-webhook-retry-policy/30554">New Jira Cloud webhook retry policy</a></td><td>Atlassian dev community</td><td>undated</td><td>medium</td></tr>
+        <tr><td>3</td><td><a href="https://developer.zendesk.com/documentation/webhooks/creating-and-monitoring-webhooks/">Creating and monitoring webhooks</a></td><td>Zendesk</td><td>living doc</td><td>high</td></tr>
+        <tr><td>4</td><td><a href="https://www.servicenow.com/community/developer-articles/understanding-servicenow-rest-api-rate-limits-key-concepts-amp/ta-p/3407367">Understanding ServiceNow REST API rate limits</a></td><td>ServiceNow Community</td><td>2026-04-14</td><td>low for numbers — superseded</td></tr>
+        <tr><td>5</td><td><a href="https://rollout.com/integration-guides/servicenow/quick-guide-to-implementing-webhooks-in-servicenow">Webhooks in ServiceNow</a></td><td>Rollout</td><td>undated</td><td>medium</td></tr>
+        <tr><td>6</td><td><a href="https://docs.payabli.com/guides/pay-ops-notifications-webhooks-vs-polling">Webhooks vs polling</a> &middot; <a href="https://hookdeck.com/outpost/guides/common-outbound-webhook-mistakes">Common outbound webhook mistakes</a></td><td>Payabli; Hookdeck</td><td>undated</td><td>medium</td></tr>
+        <tr><td>7</td><td><a href="https://w3ctag.github.io/capability-urls/">Good Practices for Capability URLs</a></td><td>W3C TAG</td><td>2014</td><td>medium</td></tr>
+        <tr><td>8</td><td><a href="https://grafana.com/docs/grafana/latest/visualizations/dashboards/share-dashboards-panels/shared-dashboards/">Shared dashboards</a></td><td>Grafana Labs</td><td>undated</td><td>medium</td></tr>
+        <tr><td>9</td><td><a href="https://support.atlassian.com/jira/kb/a-customer-notification-was-sent-from-an-internal-comment-added-to-a-jsm-ticket/">Customer notification from an internal comment</a></td><td>Atlassian Support KB</td><td>2025-09-26</td><td>high</td></tr>
+        <tr><td>10</td><td><a href="https://github.com/orgs/community/discussions/5793">Ability to mute bots</a></td><td>GitHub community</td><td>undated</td><td>medium</td></tr>
+        <tr><td>11</td><td><a href="https://community.atlassian.com/forums/Jira-questions/Can-I-stop-receiving-JIRA-automation-notifications-when-I-ve/qaq-p/2877593">Stopping Jira automation notifications</a></td><td>Atlassian Community</td><td>undated</td><td>low-medium</td></tr>
+        <tr><td>12</td><td><a href="https://www.bu.edu/tech/about/service/incident-management/managing-tickets/how-to-basics/suppress-notifications">Suppress notifications</a></td><td>Boston University IT</td><td>undated</td><td>low-medium</td></tr>
+        <tr><td>13</td><td>Inbound REST rate limiting (vendor SPA)</td><td>ServiceNow</td><td>2026-03-12</td><td>high — supersedes [4]</td></tr>
+        <tr><td>14</td><td>Journal fields (vendor SPA)</td><td>ServiceNow</td><td>2026-03-12</td><td>high — notable for what it omits</td></tr>
+        <tr><td>15</td><td><a href="https://docs.sentry.io/product/issues/">Sharing issues</a></td><td>Sentry</td><td>undated</td><td>medium</td></tr>
+      </tbody>
+    </table></div>
+  </details>
+</section>
+
+<footer>
+  <p>Deep Recon, standard preset, normal validation, red team off. Two rounds, nine researcher and verifier assistants, each run behind the research firewall — brief only, no project context, no ambient files. Every claim above traces to a digest file with a named source; project context shaped what was asked and never what is true.</p>
+  <p>Full reports, digests and append-only memory logs: <code>_bmad-output/research/{user-voice,competitive,technical}-ai-incident-triage-handoff-to-support-op-2026-09-04/</code></p>
+</footer>
+
+</div>

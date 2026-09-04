@@ -35,3 +35,9 @@ tsconfig.tsbuildinfo
 
 # Graphify code-graph output: large, regenerable, machine-specific.
 graphify-out/
+
+# Superpowers brainstorming mockups: session scratch, regenerable from the spec.
+.superpowers/
+
+# BMad install answers scoped to one person, not to the team.
+_bmad/config.user.toml
