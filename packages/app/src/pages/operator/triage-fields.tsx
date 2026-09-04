@@ -7,6 +7,18 @@ const CONFIDENCE: Record<TriageFieldSet["confidence"], string> = {
   low: "Уверенность низкая",
 }
 
+/**
+ * A colour per level, not one warning colour for all three. The confidence is the field this
+ * screen is most load-bearing on: rendered identically, "высокая" and "низкая" differ by a
+ * single word in a paragraph, and an operator scanning the page reads the colour long before
+ * the word.
+ */
+const CONFIDENCE_TONE: Record<TriageFieldSet["confidence"], string> = {
+  high: "border-border-success-base bg-surface-success-weak text-text-on-success-base",
+  medium: "border-border-warning-base bg-surface-warning-weak text-text-on-warning-base",
+  low: "border-border-critical-base bg-surface-critical-weak text-text-on-critical-base",
+}
+
 function Row(props: { label: string; children: JSX.Element }) {
   return (
     <div class="flex border-b border-border-weak-base last:border-none">
@@ -34,7 +46,7 @@ export function TriageFields(props: { fields: TriageFieldSet }) {
           <For each={props.fields.notChecked}>{(item) => <div>{item}</div>}</For>
         </Row>
       </div>
-      <p class="mt-3 border-l-[3px] border-border-warning-base bg-background-strong px-3 py-2 text-sm">
+      <p class={`mt-3 border-l-[3px] px-3 py-2 text-sm ${CONFIDENCE_TONE[props.fields.confidence]}`}>
         <strong>{CONFIDENCE[props.fields.confidence]}.</strong> {props.fields.confidenceNote}
       </p>
     </div>
