@@ -6,6 +6,7 @@ import {
   encodeWav,
   mergeChunks,
   selectCaptureImplementation,
+  separatorBefore,
   startRecording,
   transcribe,
   MAX_RECORDING_SECONDS,
@@ -443,6 +444,21 @@ describe("recorder capture", () => {
     } finally {
       audio.restore()
     }
+  })
+})
+
+describe("separatorBefore", () => {
+  test("keeps a dictated phrase from fusing with the one before it", () => {
+    expect(separatorBefore("Первая фраза.")).toBe(" ")
+  })
+
+  test("adds nothing at the start of an empty draft", () => {
+    expect(separatorBefore("")).toBe("")
+  })
+
+  test("does not double a separator the draft already has", () => {
+    expect(separatorBefore("уже с пробелом ")).toBe("")
+    expect(separatorBefore("после переноса\n")).toBe("")
   })
 })
 

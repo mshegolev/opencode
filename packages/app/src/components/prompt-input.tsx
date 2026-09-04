@@ -67,7 +67,7 @@ import {
   promptLength,
 } from "./prompt-input/history"
 import { createPromptSubmit, type FollowupDraft } from "./prompt-input/submit"
-import { NO_SPEECH_SUSPECT, startRecording, transcribe, VoiceError } from "./prompt-input/voice"
+import { NO_SPEECH_SUSPECT, separatorBefore, startRecording, transcribe, VoiceError } from "./prompt-input/voice"
 import { voiceConfig } from "./prompt-input/voice-config"
 import { VoiceModePanel } from "./prompt-input/voice-mode-panel"
 import { showToast } from "@/utils/toast"
@@ -1125,7 +1125,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       })
       return
     }
-    addPart({ type: "text", content: result.text, start: 0, end: result.text.length })
+    // Continuous dictation inserts once per pause, so the draft is usually not
+    // empty by the second phrase; read what sits before the cursor the same way
+    // the file and agent branches of `addPart` do.
+    const before = prompt
+      .current()
+      .map((part) => ("content" in part ? part.content : ""))
+      .join("")
+      .slice(0, getCursorPosition(editorRef))
+    const text = separatorBefore(before) + result.text
+    addPart({ type: "text", content: text, start: 0, end: text.length })
     if (result.noSpeechProb !== undefined && result.noSpeechProb > NO_SPEECH_SUSPECT) {
       showToast({
         title: language.t("prompt.toast.voiceEmpty.title"),

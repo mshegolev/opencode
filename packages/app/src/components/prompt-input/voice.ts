@@ -109,6 +109,18 @@ export function encodeWav(samples: Float32Array, rate: number): Blob {
   return new Blob([buffer], { type: "audio/wav" })
 }
 
+/**
+ * What to put in front of a dictated phrase so it does not fuse with the draft.
+ *
+ * Continuous dictation inserts one phrase per pause, and without this the second
+ * arrives welded to the first: "…диктовки.Вторая фраза…".
+ */
+export function separatorBefore(preceding: string): string {
+  const last = preceding.at(-1)
+  if (last === undefined || /\s/.test(last)) return ""
+  return " "
+}
+
 /** Just the part of `fetch` this module uses, so tests can stand in for it. */
 export type Fetcher = (input: string, init: RequestInit) => Promise<Response>
 
