@@ -15,6 +15,16 @@ export const Flag = {
   OTEL_EXPORTER_OTLP_ENDPOINT: process.env["OTEL_EXPORTER_OTLP_ENDPOINT"],
   OTEL_EXPORTER_OTLP_HEADERS: process.env["OTEL_EXPORTER_OTLP_HEADERS"],
 
+  // A deployment's own vocabulary for the same thing; see
+  // effect/observability-exporter.ts for why both are read. Kept as raw strings
+  // because the resolver decides what counts as on, off, and absent.
+  OPENCODE_OTEL_ENABLED: process.env["OPENCODE_OTEL_ENABLED"],
+  OPENCODE_OTEL_ENDPOINT: process.env["OPENCODE_OTEL_ENDPOINT"],
+  OPENCODE_OTEL_SERVICE_NAME: process.env["OPENCODE_OTEL_SERVICE_NAME"],
+  OPENCODE_OTEL_ENVIRONMENT: process.env["OPENCODE_OTEL_ENVIRONMENT"],
+  LANGFUSE_PUBLIC_KEY: process.env["LANGFUSE_PUBLIC_KEY"],
+  LANGFUSE_SECRET_KEY: process.env["LANGFUSE_SECRET_KEY"],
+
   OPENCODE_AUTO_HEAP_SNAPSHOT: truthy("OPENCODE_AUTO_HEAP_SNAPSHOT"),
   OPENCODE_GIT_BASH_PATH: process.env["OPENCODE_GIT_BASH_PATH"],
   OPENCODE_CONFIG: process.env["OPENCODE_CONFIG"],

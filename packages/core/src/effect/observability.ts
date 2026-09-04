@@ -5,21 +5,29 @@ import * as EffectLogger from "./logger"
 import { Flag } from "../flag/flag"
 import { InstallationChannel, InstallationVersion } from "../installation/version"
 import { ensureProcessMetadata } from "../util/opencode-process"
+import { resolveExporter } from "./observability-exporter"
 
-const base = Flag.OTEL_EXPORTER_OTLP_ENDPOINT
+const exporter = resolveExporter({
+  OTEL_EXPORTER_OTLP_ENDPOINT: Flag.OTEL_EXPORTER_OTLP_ENDPOINT,
+  OTEL_EXPORTER_OTLP_HEADERS: Flag.OTEL_EXPORTER_OTLP_HEADERS,
+  OPENCODE_OTEL_ENABLED: Flag.OPENCODE_OTEL_ENABLED,
+  OPENCODE_OTEL_ENDPOINT: Flag.OPENCODE_OTEL_ENDPOINT,
+  OPENCODE_OTEL_SERVICE_NAME: Flag.OPENCODE_OTEL_SERVICE_NAME,
+  OPENCODE_OTEL_ENVIRONMENT: Flag.OPENCODE_OTEL_ENVIRONMENT,
+  LANGFUSE_PUBLIC_KEY: Flag.LANGFUSE_PUBLIC_KEY,
+  LANGFUSE_SECRET_KEY: Flag.LANGFUSE_SECRET_KEY,
+})
+
+// Said out loud, on purpose. Telemetry that is asked for and quietly not sent
+// is indistinguishable from telemetry that is working, which is exactly how
+// this went unnoticed across two contours.
+if (exporter.problem) process.stderr.write(`opencode: telemetry not exported — ${exporter.problem}\n`)
+
+const base = exporter.endpoint
 export const enabled = !!base
 const processID = crypto.randomUUID()
 
-const headers = Flag.OTEL_EXPORTER_OTLP_HEADERS
-  ? Flag.OTEL_EXPORTER_OTLP_HEADERS.split(",").reduce(
-      (acc, x) => {
-        const [key, ...value] = x.split("=")
-        acc[key] = value.join("=")
-        return acc
-      },
-      {} as Record<string, string>,
-    )
-  : undefined
+const headers = exporter.headers
 
 export function resource(): { serviceName: string; serviceVersion: string; attributes: Record<string, string> } {
   const processMetadata = ensureProcessMetadata("main")
@@ -40,11 +48,11 @@ export function resource(): { serviceName: string; serviceVersion: string; attri
   })()
 
   return {
-    serviceName: "opencode",
+    serviceName: exporter.serviceName ?? "opencode",
     serviceVersion: InstallationVersion,
     attributes: {
       ...attributes,
-      "deployment.environment.name": InstallationChannel,
+      "deployment.environment.name": exporter.environment ?? InstallationChannel,
       "opencode.client": Flag.OPENCODE_CLIENT,
       "opencode.process_role": processMetadata.processRole,
       "opencode.run_id": processMetadata.runID,
@@ -100,7 +108,9 @@ export const layer = !base
   : Layer.unwrap(
       Effect.gen(function* () {
         const trace = yield* Effect.promise(traces)
-        return Layer.mergeAll(trace, logs())
+        // Langfuse's OTLP path takes traces and nothing else, so shipping logs
+        // there would be a stream of 404s rather than observability.
+        return exporter.logs ? Layer.mergeAll(trace, logs()) : trace
       }),
     )
 
