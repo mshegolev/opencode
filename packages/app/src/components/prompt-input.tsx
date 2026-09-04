@@ -1249,11 +1249,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             id: "prompt.voice.toggle",
             title: language.t("command.prompt.voice.toggle"),
             category: language.t("command.category.session"),
-            // Deliberately not a letter: shortcuts are matched on `event.key`,
-            // which under a Cyrillic layout reports "г" for the U key — and the
-            // people dictating Russian are on that layout while they do it.
-            // Space reports " " on every layout.
-            keybind: "mod+shift+space",
+            // Chosen by the owner. Three things work against it, none of them
+            // fixable here: macOS treats cmd+h as "hide the application" and
+            // never delivers it to the page; Chrome on Windows reserves ctrl+h
+            // for History; and a letter binding is really a binding to whatever
+            // the current layout puts on that key, so a Cyrillic layout reports
+            // "р" and the shortcut stops existing. It is in the rebindable set
+            // for exactly that reason.
+            keybind: "mod+h",
             disabled: voiceStore.state === "requesting" || voiceStore.state === "finalizing",
             onSelect: () => void toggleVoice(),
           },
