@@ -1,4 +1,5 @@
 import type { Message, Part } from "@opencode-ai/sdk/v2"
+import { slaClockView } from "./sla-clock"
 import type { IncidentDetail, IncidentRow, QueuePage, QueueScope } from "./types"
 
 const iso = (ms: number) => new Date(ms).toISOString()
@@ -12,15 +13,23 @@ const iso = (ms: number) => new Date(ms).toISOString()
 // a breach instant is a fixed point in real time, so `remainingMs = breachInstant - nowMs`
 // genuinely shrinks as real seconds pass, and `lastEventAt` genuinely ages past the ingest
 // threshold once the app has been open long enough — instead of resetting every refetch.
-const FIXTURE_ANCHOR_MS = Date.now()
+//
+// The anchor is a parameter everywhere below, defaulting to this module-load value. The running
+// app keeps the default and so keeps the behaviour above; a caller that has its own fixed idea
+// of "now" — a Storybook story, a test — passes `anchorMs` equal to its own `nowMs` so the two
+// clocks are the same clock. Without that, a story with a literal `nowMs` renders rows against
+// deadlines anchored to whenever the module happened to load, which silently turns half of them
+// breached and hides the very tones the story exists to review.
+export const FIXTURE_ANCHOR_MS = Date.now()
 
-/** A fixed instant `offsetMs` away from the module-load anchor — negative is already past. */
-function anchoredAt(offsetMs: number): number {
-  return FIXTURE_ANCHOR_MS + offsetMs
+/** A fixed instant `offsetMs` away from the anchor — negative is already past. */
+function anchoredAt(anchorMs: number, offsetMs: number): number {
+  return anchorMs + offsetMs
 }
 
-function rows(nowMs: number): IncidentRow[] {
+function rows(nowMs: number, anchorMs: number = FIXTURE_ANCHOR_MS): IncidentRow[] {
   const captured = iso(nowMs - 5_000)
+  const anchored = (offsetMs: number) => anchoredAt(anchorMs, offsetMs)
   return [
     {
       number: "INC0048812",
@@ -31,8 +40,8 @@ function rows(nowMs: number): IncidentRow[] {
       status: "In progress",
       sla: {
         clockState: "running",
-        remainingMs: anchoredAt(41 * 60_000) - nowMs,
-        breachAt: iso(anchoredAt(41 * 60_000)),
+        remainingMs: anchored(41 * 60_000) - nowMs,
+        breachAt: iso(anchored(41 * 60_000)),
         capturedAt: captured,
       },
       triage: "ready",
@@ -47,8 +56,8 @@ function rows(nowMs: number): IncidentRow[] {
       status: "New",
       sla: {
         clockState: "running",
-        remainingMs: anchoredAt(67 * 60_000) - nowMs,
-        breachAt: iso(anchoredAt(67 * 60_000)),
+        remainingMs: anchored(67 * 60_000) - nowMs,
+        breachAt: iso(anchored(67 * 60_000)),
         capturedAt: captured,
       },
       triage: "running",
@@ -62,8 +71,8 @@ function rows(nowMs: number): IncidentRow[] {
       status: "In progress",
       sla: {
         clockState: "running",
-        remainingMs: anchoredAt(192 * 60_000) - nowMs,
-        breachAt: iso(anchoredAt(192 * 60_000)),
+        remainingMs: anchored(192 * 60_000) - nowMs,
+        breachAt: iso(anchored(192 * 60_000)),
         capturedAt: captured,
       },
       triage: "running",
@@ -90,8 +99,8 @@ function rows(nowMs: number): IncidentRow[] {
       status: "New",
       sla: {
         clockState: "running",
-        remainingMs: anchoredAt(52 * 3_600_000) - nowMs,
-        breachAt: iso(anchoredAt(52 * 3_600_000)),
+        remainingMs: anchored(52 * 3_600_000) - nowMs,
+        breachAt: iso(anchored(52 * 3_600_000)),
         capturedAt: captured,
       },
       triage: "not-started",
@@ -107,8 +116,8 @@ function rows(nowMs: number): IncidentRow[] {
       // is always ~4 minutes old, regardless of how long the module has been loaded.
       sla: {
         clockState: "running",
-        remainingMs: anchoredAt(348 * 60_000) - nowMs,
-        breachAt: iso(anchoredAt(348 * 60_000)),
+        remainingMs: anchored(348 * 60_000) - nowMs,
+        breachAt: iso(anchored(348 * 60_000)),
         capturedAt: iso(nowMs - 240_000),
       },
       triage: "unknown",
@@ -121,7 +130,7 @@ function rows(nowMs: number): IncidentRow[] {
       group: "Контент",
       status: "In progress",
       // Deliberately breached: the deadline is anchored in the past and stays there.
-      sla: { clockState: "breached", breachAt: iso(anchoredAt(-34 * 60_000)), capturedAt: captured },
+      sla: { clockState: "breached", breachAt: iso(anchored(-34 * 60_000)), capturedAt: captured },
       triage: "nothing-to-triage",
     },
     {
@@ -137,30 +146,44 @@ function rows(nowMs: number): IncidentRow[] {
   ]
 }
 
-export function fixtureQueuePage(scope: QueueScope, nowMs: number): QueuePage {
-  const all = rows(nowMs)
-  const visible = scope === "mine" ? all.filter((r) => r.assignedToMe) : scope === "group" ? all.filter((r) => !r.assignedToMe) : all
+function inScope(all: IncidentRow[], scope: QueueScope): IncidentRow[] {
+  return scope === "mine" ? all.filter((r) => r.assignedToMe) : scope === "group" ? all.filter((r) => !r.assignedToMe) : all
+}
+
+function perScope(all: IncidentRow[], holds: (row: IncidentRow) => boolean): Record<QueueScope, number> {
+  return {
+    mine: inScope(all, "mine").filter(holds).length,
+    group: inScope(all, "group").filter(holds).length,
+    all: all.filter(holds).length,
+  }
+}
+
+export function fixtureQueuePage(scope: QueueScope, nowMs: number, anchorMs: number = FIXTURE_ANCHOR_MS): QueuePage {
+  const all = rows(nowMs, anchorMs)
   return {
     scope,
-    rows: visible,
+    rows: inScope(all, scope),
     serverTime: iso(nowMs),
-    // Anchored to module load, not nowMs: the last ingest event is a fixed instant, so the
+    // Anchored, not derived from nowMs: the last ingest event is a fixed instant, so the
     // silence since it arrived genuinely grows with real elapsed time instead of resetting to
     // "12 seconds ago" on every 30s refetch — which is what made the staleness banner
     // unreachable before.
-    lastEventAt: iso(anchoredAt(-12_000)),
+    lastEventAt: iso(anchoredAt(anchorMs, -12_000)),
     counts: {
-      mine: all.filter((r) => r.assignedToMe).length,
-      group: all.filter((r) => !r.assignedToMe).length,
+      mine: inScope(all, "mine").length,
+      group: inScope(all, "group").length,
       all: all.length,
-      ready: all.filter((r) => r.triage === "ready").length,
-      breached: all.filter((r) => r.sla.clockState === "breached").length,
+      ready: perScope(all, (r) => r.triage === "ready"),
+      // Decided by the clock module, never by `sla.clockState` alone: a running clock whose
+      // deadline has passed renders as "нарушен" in its row, and a badge that counted only
+      // `clockState === "breached"` would disagree with the rows it summarises.
+      breached: perScope(all, (r) => slaClockView({ snapshot: r.sla, serverNowMs: nowMs }).tone === "breached"),
     },
   }
 }
 
-export function fixtureIncidentDetail(number: string, nowMs: number): IncidentDetail {
-  const row = rows(nowMs).find((r) => r.number === number)
+export function fixtureIncidentDetail(number: string, nowMs: number, anchorMs: number = FIXTURE_ANCHOR_MS): IncidentDetail {
+  const row = rows(nowMs, anchorMs).find((r) => r.number === number)
   if (!row) throw new Error(`no fixture incident ${number}`)
   return {
     row,

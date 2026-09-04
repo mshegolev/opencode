@@ -20,14 +20,17 @@ export function QueueTabs(props: { scope: QueueScope; counts: QueuePage["counts"
           >
             <span>{LABEL[scope]}</span>
             <span class="rounded-full bg-surface-raised-base px-1.5 text-[10px] font-semibold tabular-nums">{props.counts[scope]}</span>
-            <Show when={scope !== "mine" && props.counts.ready > 0}>
+            {/* Counts for THIS tab, not for the queue as a whole: the badge's job is to say
+                what this tab hides, and a global figure on the group tab would include the
+                operator's own incidents, which this tab does not show. */}
+            <Show when={scope !== "mine" && props.counts.ready[scope] > 0}>
               <span class="rounded-full bg-surface-success-weak px-1.5 text-[10px] font-semibold tabular-nums text-icon-success-base">
-                {props.counts.ready} готово
+                {props.counts.ready[scope]} готово
               </span>
             </Show>
-            <Show when={scope !== "mine" && props.counts.breached > 0}>
+            <Show when={scope !== "mine" && props.counts.breached[scope] > 0}>
               <span class="rounded-full bg-surface-critical-weak px-1.5 text-[10px] font-semibold tabular-nums text-icon-critical-base">
-                {props.counts.breached} нарушено
+                {props.counts.breached[scope]} нарушено
               </span>
             </Show>
           </button>
