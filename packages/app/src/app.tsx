@@ -46,7 +46,7 @@ import { SettingsProvider, useSettings } from "@/context/settings"
 import { TerminalProvider } from "@/context/terminal"
 import DirectoryLayout from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
-import { isOperatorPath } from "@/pages/operator/routes"
+import { isOperatorPath, OPERATOR_INCIDENT_PATH, OPERATOR_QUEUE_PATH } from "@/pages/operator/routes"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 
@@ -152,10 +152,11 @@ function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
     <Show
       when={!isOperatorPath(location.pathname)}
       fallback={
-        <>
-          {props.appChildren}
-          {props.children}
-        </>
+        // Only the route's own children. `props.appChildren` is host chrome (the desktop
+        // renderer passes `<Inner />`, which calls `useCommand()`); `CommandProvider` is
+        // inside `AppShellProviders`, which this branch exists to skip, so rendering it here
+        // throws and the ErrorBoundary replaces the whole app with an error page.
+        <>{props.children}</>
       }
     >
       <AppShellProviders>
@@ -342,8 +343,8 @@ export function AppInterface(props: {
                     root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
                   >
                     <Route path="/" component={HomeRoute} />
-                    <Route path="/queue" component={QueueRoute} />
-                    <Route path="/queue/:number" component={IncidentRoute} />
+                    <Route path={OPERATOR_QUEUE_PATH} component={QueueRoute} />
+                    <Route path={OPERATOR_INCIDENT_PATH} component={IncidentRoute} />
                     <Route path="/:dir" component={DirectoryLayout}>
                       <Route path="/" component={() => <Navigate href="session" />} />
                       <Route path="/session/:id?" component={SessionRoute} />
