@@ -356,6 +356,11 @@ render(() => {
   function Inner() {
     const cmd = useCommand()
     menuTrigger = (id) => cmd.trigger(id)
+    // Inner unmounts on operator routes, which render outside the app shell and so outside
+    // CommandProvider. Without this the native menu would keep calling into a disposed context.
+    onCleanup(() => {
+      menuTrigger = null
+    })
 
     const theme = useTheme()
 

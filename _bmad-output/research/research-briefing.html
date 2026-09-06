@@ -187,7 +187,7 @@ footer p{max-width:64ch}
       <text class="tk" x="682" y="186" text-anchor="end">420s</text>
       <text class="tk" x="150" y="204">seconds saved per ticket &mdash; linear scale</text>
     </svg>
-    <figcaption>A ServiceNow Community practitioner running Now Assist on a live service desk reports 10&ndash;20 seconds per ticket <span class="chip u">unverified</span>. Vendor material for the same class of feature circulates 4&ndash;7 minutes. Nothing retrieved in two rounds resolves the gap. At the practitioner's number, a fifteen-second verification step consumes the entire saving.</figcaption>
+    <figcaption><strong>Read this as an absence of knowledge, not as two measurements.</strong> A ServiceNow Community practitioner running Now Assist on a live service desk reports 10&ndash;20 seconds per ticket <span class="chip u">single source</span>; vendor material for the same feature class circulates 4&ndash;7 minutes <span class="chip u">vendor marketing</span>. Neither side survives triangulation on its own, and nothing retrieved in two rounds resolves the gap. At the practitioner's number a fifteen-second verification step consumes the entire saving &mdash; but see the contrary case below: that practitioner was describing field-<em>categorisation</em>, while the proposal is an <em>investigation</em>, whose saving is bounded by diagnostic time rather than summarisation time. The comparison may be a category error.</figcaption>
   </figure>
 </section>
 
@@ -310,6 +310,46 @@ footer p{max-width:64ch}
 </section>
 
 <section>
+  <h2>The contrary case</h2>
+  <p class="sub">The plan gate had the red-team pass off, so this section was empty. A later elicitation pass filled it. Each item is the strongest available argument that the verdict above is wrong.</p>
+
+  <div class="finding">
+    <div class="top"><h3>&ldquo;Measure before building&rdquo; was incoherent as originally written</h3></div>
+    <p>You cannot measure the saving of a loop that does not exist. Measuring verification cost needs a working handoff for an operator to verify — so the recommendation demanded data obtainable only by the action it deferred. <strong>The cheapest measurement is the thinnest prototype</strong>, which is why the recommendation now reads build-then-measure, and why that prototype has since been built.</p>
+  </div>
+
+  <div class="finding">
+    <div class="top"><h3>METR's population is the case most hostile to AI assistance</h3></div>
+    <p>Expert developers on codebases they already knew, where their own memory beats any retrieval. An L1 operator on an unfamiliar incident is the opposite pole: no context, high search cost. Verint's 45% of calls requiring a search at ~2.7 minutes each describes the addressable time far better than 10&ndash;20 seconds does.</p>
+  </div>
+
+  <div class="finding">
+    <div class="top"><h3>Speed may be the wrong axis entirely</h3></div>
+    <p>METR measured speed, not quality. If AI triage improves routing accuracy the payoff is in escalations that never happen, not in seconds saved — and this research never examined that axis at all.</p>
+  </div>
+
+  <div class="finding">
+    <div class="top"><h3>The link direction may describe who owned the pixels, not what operators want</h3></div>
+    <p>Zendesk, ServiceNow and Freshservice own the ticket UI, so inline write-back is free for them. A team that does <em>not</em> own the ITSM interface has no inline option of comparable quality — for such a team a link is not a preference, it is the only available shape. The two readings predict the same observation and different futures, and nothing retrieved separates them.</p>
+  </div>
+</section>
+
+<section>
+  <h2>How much weight each run carries</h2>
+  <p class="sub">A claim is triangulated when three independent source <em>types</em> hold it — quantitative, qualitative, expert. The three runs are presented above with equal visual weight. They do not carry equal weight.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Run</th><th>Triangulation</th><th>What that means for its recommendations</th></tr></thead>
+      <tbody>
+        <tr><td><strong>technical</strong></td><td><span class="chip v">passes</span></td><td>Vendor primary docs, independent community confirmation, and practitioner guidance all hold the delivery-guarantee and idempotency findings. Build on them as stated.</td></tr>
+        <tr><td><strong>user-voice</strong></td><td><span class="chip d">fails on the hinge</span></td><td>Neither side of the 20&times; gap is triangulated. Worse, the 93/35/47 spread is one source <em>type</em> — self-report — applied three times, and the one controlled trial measured a ~39-point gap between believed and actual speed. Keep the direction, discard the precision.</td></tr>
+        <tr><td><strong>competitive</strong></td><td><span class="chip u">cannot be</span></td><td>An absence claim is not something three source types can hold; it is the residue of a search, bounded only by its perimeter. &ldquo;Unfalsified&rdquo; stays the honest word however many vendors are added.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
   <h2>What only the combination shows</h2>
   <p class="sub">Cross-run insights — the three runs disagree productively in two places</p>
 
@@ -336,7 +376,7 @@ footer p{max-width:64ch}
     <table>
       <thead><tr><th>Do this</th><th>Why</th><th>Confidence basis</th></tr></thead>
       <tbody>
-        <tr><td><strong>Measure the gain on your own queue before building</strong></td><td>Instrument time from handoff opened to first independent operator action, and how often the operator re-runs a diagnostic the AI already ran</td><td>High — established absence of public data, plus a demonstration that self-report misleads by ~39 points</td></tr>
+        <tr><td><strong>Build the thinnest loop as the measurement instrument, then measure</strong><br><span style="font-size:.85em;color:var(--muted)">Revised — originally read &ldquo;measure before building&rdquo;</span></td><td>The prototype is the cheapest measuring device available: instrument time from handoff opened to first independent operator action, and how often the operator re-runs a diagnostic the AI already ran</td><td>High — established absence of public data, plus a demonstration that the instrument everyone else used is unfit</td></tr>
         <tr><td><strong>Do not accept self-report as the measurement</strong></td><td>The only controlled trial found people wrong about their own speed, in the wrong direction</td><td>High — randomized controlled trial</td></tr>
         <tr><td><strong>Lead with inline write-back</strong></td><td>Put the verifiable result in the ticket; offer the link only for the deep trace</td><td>Medium-high — inline pattern is vendor-documented across the field; the operator-preference half is argued, not measured</td></tr>
         <tr><td><strong>Copy the narrow-agents architecture</strong></td><td>Several agents each owning named fields beat one writing prose, for verifiability as much as accuracy</td><td>High for what ServiceNow ships; the verifiability argument is inference</td></tr>
@@ -363,6 +403,7 @@ footer p{max-width:64ch}
         <tr><td>Would an operator follow a link out of the ticket at all?</td><td>Prototype test; zero public evidence about this mechanism</td></tr>
         <tr><td>Do L2 engineers behave like contact-centre agents toward AI output?</td><td>Direct observation — every survey found samples a different job, and an L2 can re-run the diagnostic, which makes ignoring the handoff rational</td></tr>
         <tr><td>Does source attribution actually earn operator trust?</td><td>Operator interviews, not vendor docs. Unresolved after two rounds</td></tr>
+        <tr><td>Does AI triage improve routing accuracy, and what is an avoided escalation worth?</td><td>Never examined — this research measured time, and the payoff may live on the quality axis instead</td></tr>
         <tr><td>Does Datadog write an investigation URL into a ticket?</td><td>Browser read of the Bits Investigation and Case Management Jira-sync docs</td></tr>
         <tr><td>Does ServiceNow offer native outbound table-change subscription?</td><td>A vendor page read through the SPA, not the docs index</td></tr>
         <tr><td>What are your instance's actual rate-limit rules?</td><td><code>sys_rate_limit_rules_list.do</code> on that instance — minutes of work</td></tr>
@@ -465,6 +506,7 @@ footer p{max-width:64ch}
 
 <footer>
   <p>Deep Recon, standard preset, normal validation, red team off. Two rounds, nine researcher and verifier assistants, each run behind the research firewall — brief only, no project context, no ambient files. Every claim above traces to a digest file with a named source; project context shaped what was asked and never what is true.</p>
+  <p>Amended 2026-09-06 by an advanced-elicitation pass — source triangulation, then steelmanning — which added the weight-by-run table, the contrary case the switched-off red team never produced, and the revision of the first recommendation. Nothing was retracted. The prototype that recommendation calls for has since been built.</p>
   <p>Full reports, digests and append-only memory logs: <code>_bmad-output/research/{user-voice,competitive,technical}-ai-incident-triage-handoff-to-support-op-2026-09-04/</code></p>
 </footer>
 

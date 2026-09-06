@@ -231,13 +231,81 @@ the easy middle is a tool that saves time on the tickets that were already cheap
 figures [1] found no second source in targeted verification. The logic stands on its own;
 the number should not be quoted.
 
+## Amendment — source triangulation and the contrary case
+
+Added 2026-09-06 by an advanced-elicitation pass (source triangulation, then
+steelmanning) after the report was first assembled. Nothing above is retracted; what
+follows says how much weight the evidence above can actually carry, and states the
+strongest case against this report's own conclusion.
+
+### Triangulation verdict
+
+The method: a claim is accepted only when three independent *types* of source hold it —
+quantitative, qualitative, expert. Applied to this report's load-bearing claims:
+
+| Claim | Quantitative | Qualitative | Expert | Verdict |
+|---|---|---|---|---|
+| 10–20 seconds saved per ticket [9] | — | one practitioner post | — | **fails** |
+| 4–7 minutes saved (the vendor side of the same gap) | — | — | vendor marketing | **fails** |
+| METR: 19% slower, believed faster [8] | RCT | Faros, second-hand [12] | — | 2 of 3, one weak |
+| "Checking AI output is routine" [1][6][7] | three surveys | three institutional policies | — | 2 of 3 — but all three surveys are **one type applied three times**: self-report |
+
+Two consequences the body of this report does not draw sharply enough.
+
+**The hinge is a contrast of two anecdotes, not of two measurements.** Neither side of the
+20× gap survives triangulation on its own. The gap is real as an *absence of knowledge* —
+nobody has measured this — and it should be read that way rather than as a measured
+quantity. The chart in the consolidated briefing says so explicitly.
+
+**The 93/35/47 spread is not merely disputed; it was gathered with an unfit instrument.**
+All three figures ask people to describe their own verification behaviour, and [8] measured
+a ~39-point gap between what developers believed about their speed and what they did. One
+source type applied three times is not triangulation. Treat the direction — checking is
+routine — as the finding, and discard the precision entirely.
+
+### Contrary evidence — the strongest case against this report
+
+The plan-gate knobs had the red-team pass off, so this section was empty. Steelmanning
+fills it. Each of these is the best available argument that this report's central
+recommendation is wrong.
+
+**"Measure before building" may be incoherent.** You cannot measure the saving of a loop
+that does not exist. Measuring verification cost requires a working handoff for an operator
+to verify. The cheapest measurement *is* the thinnest prototype — so the recommendation, as
+originally worded, demanded data obtainable only by the action it deferred.
+
+**The 10–20 second figure may not be about this at all.** That practitioner was describing
+Now Assist doing *categorisation* — field-filling. The proposal is an *investigation*
+session: queries, logs, correlation. The saving there is bounded by diagnostic time, not by
+summarisation time. Comparing the two may be a category error, and the briefing's chart is
+built on that comparison.
+
+**METR's population is the case most hostile to AI assistance.** Expert developers on
+codebases they already knew, where their own memory beats any retrieval. An L1 operator on
+an unfamiliar incident is the opposite pole: no context, high search cost. Verint's finding
+that 45% of calls require searching, at ~2.7 minutes each [2], describes the addressable
+time far better than 10–20 seconds does.
+
+**Speed may be the wrong axis entirely.** METR measured speed, not quality. If AI triage
+improves routing accuracy, the payoff is in escalations that never happen, not in seconds
+saved — and this research never examined that axis.
+
+### What the contrary case changes
+
+Recommendation 1 below is revised accordingly, and the revision has since been overtaken by
+events: the thinnest possible loop was built (`docs/superpowers/plans/2026-09-05-operator-workspace-core.md`)
+and now exists as the instrument this argument called for.
+
 ## Recommendations
 
-1. **Measure the gain on your own queue before building the loop.** Instrument time from
-   handoff opened to first independent operator action, and how often the operator re-runs
-   a diagnostic the AI already ran. Do not accept self-report as the measurement. *Confidence
-   basis: high — rests on an established absence of public data plus [8]'s demonstration
-   that self-report misleads by ~39 points.*
+1. **Build the thinnest possible loop as the measurement instrument, then measure.**
+   *Revised 2026-09-06 by the steelmanning pass; the original read "measure before building",
+   which demanded data obtainable only by the action it deferred.* The prototype is the
+   cheapest measuring device available: instrument time from handoff opened to first
+   independent operator action, and how often the operator re-runs a diagnostic the AI
+   already ran. Do not accept self-report as the measurement — [8] measured a ~39-point gap
+   between believed and actual speed. *Confidence basis: high — an established absence of
+   public data, plus a demonstration that the instrument everyone else used is unfit.*
 2. **Assume the practitioner number until your own data says otherwise.** Design as if the
    available saving is tens of seconds, not minutes [9]. If the design only pays off at the
    vendor number, it does not pay off. *Confidence basis: low-medium — one practitioner,
@@ -262,6 +330,7 @@ the number should not be quoted.
 | What does verification cost per incident? | Same pilot; no public measurement exists |
 | Do L2 engineers behave like contact-centre agents toward AI output? | Direct observation; every survey found samples a different job |
 | Does source attribution actually earn operator trust? | Unresolved after two rounds; needs operator interviews, not vendor docs |
+| Does AI triage improve routing accuracy, and what is an avoided escalation worth? | Never examined — this research measured time, and the payoff may live on the quality axis instead |
 | Would an operator follow a link out of the ticket at all? | Prototype test; zero public evidence about this mechanism |
 | What workarounds do operators build today? | Requires the blocked venues, or your own team |
 

@@ -151,6 +151,29 @@ worth its own page. The user-voice run's evidence leans toward the first.
 | 9 | [Bits Investigation](https://docs.datadoghq.com/bits_ai/bits_investigation/) | Datadog | undated | 2026-09-04 | low — reached through a summarizer; direct fetch blocked |
 | 10 | [ServiceNow user guide](https://support.pagerduty.com/main/docs/servicenow-user-guide) | PagerDuty | updated 2026-03-19 | 2026-09-04 | medium — vendor primary |
 
+## Amendment — what the absence claim can and cannot mean
+
+Added 2026-09-06 by an advanced-elicitation pass. Two corrections to how this report's
+central finding should be read.
+
+**An absence claim cannot be triangulated, by construction.** "Nobody ships X" is not a
+claim three source types can hold; it is the residue of a search whose perimeter is the
+only thing that bounds it. This report's perimeter covered ServiceNow properly, five other
+helpdesk vendors thinly, and four AIOps vendors in a second round — with Rootly, BigPanda,
+Moogsoft, Rovo, Front, Help Scout and Salesforce never reached. "Unfalsified" remains the
+honest word, and it will remain the honest word however many vendors are added.
+
+**The link direction may describe a constraint on vendors rather than a preference of
+operators.** Zendesk, ServiceNow and Freshservice own the ticket UI. Inline write-back is
+free for them: they control the surface the operator is already looking at. A team that does
+*not* own the ITSM interface has no inline option of comparable quality — for such a team a
+link is not a design preference, it is the only available shape.
+
+Read that way, "the ticket never points at the session" stops being a warning about what
+operators will not do and becomes a consequence of who owned the pixels. The two readings
+predict the same observation and different futures, and nothing retrieved separates them.
+The pilot is what separates them.
+
 ## Cross-dimension insights
 
 **The consistency of the link direction is the finding.** Two rounds, two product

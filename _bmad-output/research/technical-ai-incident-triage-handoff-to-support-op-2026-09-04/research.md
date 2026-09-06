@@ -290,6 +290,23 @@ stored-queries-only constraint [8], the pattern for a readable agent session is:
 creation, frozen redacted projection, instant revocation, and an expiry you add yourself
 because the analogues do not.
 
+## Amendment — triangulation verdict
+
+Added 2026-09-06 by an advanced-elicitation pass. Of the three runs, **this is the only one
+whose conclusions survive source triangulation.** Its load-bearing claims are held by three
+independent types at once: vendor primary documentation, independent community confirmation
+(the Atlassian retry-policy thread), and practitioner guidance from webhook-infrastructure
+vendors. The delivery-guarantee and idempotency findings can be built on as stated.
+
+The consolidated briefing presents all three runs with equal visual weight. They do not carry
+equal weight. The user-voice run's decisive figure fails triangulation outright, the
+competitive run's central finding is an absence claim that cannot be triangulated at all, and
+this run passes. Weight the recommendations accordingly.
+
+Two claims inside this run remain single-sourced and are marked as such in the body: every
+ServiceNow rate-limit number (folklore until read from the target instance), and the
+reconciliation-sweep pattern, which no ITSM vendor endorses by name.
+
 ## Cross-dimension insights
 
 **Every silent-failure mode has the same remedy, which is why it is worth building once.**
